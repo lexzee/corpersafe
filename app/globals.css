@@ -20,6 +20,10 @@
     --accent-foreground: 0 0% 98%;
     --destructive: 0 84.2% 60.2%; /* red-500 */
     --destructive-foreground: 0 0% 98%;
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 98%;
+    --warning: 45 93% 47%;
+    --warning-foreground: 0 0% 98%;
     --border: 215 20% 91%; /* slate-200 */
     --input: 215 20% 91%; /* slate-200 */
     --ring: 164 95% 24%; /* emerald-700 */
@@ -43,6 +47,10 @@
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
+    --success: 142 70% 50%;
+    --success-foreground: 0 0% 98%;
+    --warning: 48 96% 53%;
+    --warning-foreground: 0 0% 98%;
     --border: 222 31% 20%; /* slate-800 */
     --input: 222 31% 20%; /* slate-800 */
     --ring: 165 90% 30%; /* emerald-600 */

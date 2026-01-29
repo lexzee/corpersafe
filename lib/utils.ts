@@ -23,6 +23,50 @@ export function timeAgo(dateString: string) {
   return `${Math.floor(minutes / 60)}h ago`;
 }
 
+export const runSafetyCheck = async (
+  silent = false,
+  enableAudio: () => void,
+  setLoading: (value: React.SetStateAction<boolean>) => void,
+  setTrips: (value: React.SetStateAction<any[]>) => void,
+) => {
+  const supabase = createClient();
+  enableAudio();
+  if (!silent) setLoading(true);
+  const { data, error } = await supabase.rpc("check_signal_loss");
+
+  if (!silent) {
+    if (error) {
+      console.error("Safety Check Failed:", error);
+      alert("Check Failed, Check Console.");
+    } else {
+      const { newly_flagged, total_danger } = data as {
+        newly_flagged: number;
+        total_danger: number;
+      };
+
+      if (newly_flagged > 0) {
+        alert(
+          `⚠️ WARNING: ${newly_flagged} new signals lost! Total Danger: ${total_danger}`,
+        );
+      } else if (total_danger > 0) {
+        alert(
+          `ℹ️ Scan Complete. No NEW lost signals.\n\nHowever. ${total_danger} trips are currently in DANGER sate.`,
+        );
+      } else {
+        alert("✅ Scan Complete: All signals are fresh.");
+      }
+    }
+  }
+
+  // Refetch data to update UI
+  const { data: newData } = await supabase
+    .from("trips")
+    .select("*, profiles(full_name, phone, next_of_kin)")
+    .neq("status", "completed");
+  if (newData) setTrips(newData);
+  setLoading(false);
+};
+
 export const copyCode = (tracking_code: string) => {
   navigator.clipboard.writeText(tracking_code);
   alert("Tracking code copied!");

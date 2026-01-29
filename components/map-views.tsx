@@ -8,6 +8,8 @@ import iconShadow from "leaflet/dist/images/marker-shadow.png";
 import L from "leaflet";
 import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
+import TripDetails from "./trip-details";
+import { useTheme } from "next-themes";
 
 const DefaultIcon = L.icon({
   // @ts-ignore
@@ -36,9 +38,9 @@ const Icons = {
   active: createIcon("#10b981"), // Green
   paused: createIcon("#f59e0b"), // Amber
   danger: new L.DivIcon({
-    // Pulsing Red for SOS
-    className: "animate-ping",
-    html: `<div style="background-color: #dc2626; width: 100%; height: 100%; border-radius: 50%;"></div>`,
+    // Pulsing Red for SOS - Animation applied to inner div to avoid Leaflet transform conflict
+    className: "bg-transparent border-none",
+    html: `<div class="relative flex items-center justify-center w-full h-full"><span class="absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75 animate-ping"></span><span class="relative inline-flex rounded-full h-3 w-3 bg-destructive"></span></div>`,
     iconSize: [20, 20],
     iconAnchor: [10, 10],
   }),
@@ -65,51 +67,59 @@ function MapUpdater({ center }: { center: [number, number] }) {
   }, [center, map]);
   return null;
 }
-// export function AdminMapView({
-//   displayTrips,
-//   selectedTrip,
-//   setSelectedTrip,
-//   vehicleDetails,
-// }: any) {
-//   return (
-//     <div className="flex-1 relative bg-slate-200 hidden md:block">
-//       <MapContainer center={[9.082, 8.6753]} zoom={9} className="h-full w-full">
-//         <TileLayer
-//           attribution="&copy; OpenStreetMap"
-//           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
-//         />
-//         {displayTrips.map(
-//           (trip: any) =>
-//             trip.current_lat && (
-//               <Marker
-//                 key={trip.id}
-//                 position={[trip.current_lat, trip.current_lng]}
-//                 icon={
-//                   trip.status === "danger"
-//                     ? Icons.danger
-//                     : trip.status === "paused"
-//                     ? Icons.paused
-//                     : Icons.active
-//                 }
-//                 eventHandlers={{ click: () => setSelectedTrip(trip) }}
-//               />
-//             )
-//         )}
-//         <MapController selectedTrip={selectedTrip} />
-//       </MapContainer>
+export function AdminMapView({
+  displayTrips,
+  selectedTrip,
+  setSelectedTrip,
+  vehicleDetails,
+}: any) {
+  const { resolvedTheme } = useTheme();
 
-//       {/* Trip Details Card (Floating Overlay) */}
-//       {selectedTrip && (
-//         <TripDetails
-//           selectedTrip={selectedTrip}
-//           setSelectedTrip={setSelectedTrip}
-//           vehicleDetails={vehicleDetails}
-//         />
-//       )}
-//     </div>
-//   );
-// }
+  return (
+    <div className="flex-1 relative bg-muted hidden md:block">
+      <MapContainer center={[9.082, 8.6753]} zoom={9} className="h-full w-full">
+        <TileLayer
+          attribution="&copy; OpenStreetMap"
+          url={
+            resolvedTheme === "dark"
+              ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          }
+        />
+        {displayTrips.map(
+          (trip: any) =>
+            trip.current_lat && (
+              <Marker
+                key={trip.id}
+                position={[trip.current_lat, trip.current_lng]}
+                icon={
+                  trip.status === "danger"
+                    ? Icons.danger
+                    : trip.status === "paused"
+                      ? Icons.paused
+                      : Icons.active
+                }
+                eventHandlers={{ click: () => setSelectedTrip(trip) }}
+              />
+            ),
+        )}
+        <MapController selectedTrip={selectedTrip} />
+      </MapContainer>
+
+      {/* Trip Details Card (Floating Overlay) */}
+      {selectedTrip && (
+        <TripDetails
+          selectedTrip={selectedTrip}
+          setSelectedTrip={setSelectedTrip}
+          vehicleDetails={vehicleDetails}
+        />
+      )}
+    </div>
+  );
+}
 export function UserMapView({ currentLoc, speed, trip }: any) {
+  const { resolvedTheme } = useTheme();
+
   return (
     <div className="h-full w-full relative">
       <MapContainer
@@ -119,7 +129,11 @@ export function UserMapView({ currentLoc, speed, trip }: any) {
         className="h-full w-full"
       >
         <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          url={
+            resolvedTheme === "dark"
+              ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          }
           attribution="&copy; OpenStreetMap"
         />
         <Marker position={currentLoc} icon={DefaultIcon}>

@@ -63,7 +63,7 @@ export function LoginForm({
 
       // Redirect based on user role
       if (profile.role === "pcm") {
-        router.push("/protected");
+        router.push("/pcm");
       } else {
         router.push("/admin");
       }
