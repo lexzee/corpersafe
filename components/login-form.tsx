@@ -15,6 +15,14 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import {
+  AlertCircle,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Loader2,
+  Shield,
+} from "lucide-react";
 
 export function LoginForm({
   className,
@@ -22,6 +30,7 @@ export function LoginForm({
 }: React.ComponentPropsWithoutRef<"div">) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
@@ -33,15 +42,38 @@ export function LoginForm({
     setError(null);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-      if (error) throw error;
-      // Update this route to redirect to an authenticated route. The user already has an active session.
-      router.push("/protected");
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+      if (authError) throw authError;
+      if (!authData.user) throw new Error("No user data returned");
+
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", authData.user.id)
+        .single();
+      if (profileError) {
+        console.error("Error fetching profile:", profileError);
+        router.push("/protected");
+        return;
+      }
+
+      // Redirect based on user role
+      if (profile.role === "pcm") {
+        router.push("/protected");
+      } else {
+        router.push("/admin");
+      }
+    } catch (err: Error | any) {
+      console.error("Login error:", err.message);
+      setError(
+        err.message === "Invalid login credentials"
+          ? "Incorrect email or password."
+          : err.message || "Failed to sign in",
+      );
     } finally {
       setIsLoading(false);
     }
@@ -50,13 +82,28 @@ export function LoginForm({
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Login</CardTitle>
+        <CardHeader className="text-center animate-in slide-in-from-top duration-500">
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center gap-2 text-primary font-bold text-xl mb-2"
+          >
+            <div className="bg-background p-2 rounded-lg">
+              <Shield className="fill-primary text-secondary-foreground w-6 h-6" />
+            </div>
+            CorperSafe
+          </Link>
+          <CardTitle className="text-2xl">Welcome Back</CardTitle>
           <CardDescription>
-            Enter your email below to login to your account
+            Sign in to continue tracking or monitoring.
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {error && (
+            <div className="mb-6 bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 border border-red-100">
+              <AlertCircle size={16} />
+              {error}
+            </div>
+          )}
           <form onSubmit={handleLogin}>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
@@ -64,7 +111,7 @@ export function LoginForm({
                 <Input
                   id="email"
                   type="email"
-                  placeholder="m@example.com"
+                  placeholder="corpersafe@example.com"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -80,17 +127,33 @@ export function LoginForm({
                     Forgot your password?
                   </Link>
                 </div>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
+                <div className="relative">
+                  <Input
+                    id="password"
+                    type={showPassword ? "text" : "password"}
+                    required
+                    value={password}
+                    placeholder="••••••••"
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
               </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
+
               <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Logging in..." : "Login"}
+                {isLoading ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  <>
+                    Sign In <ArrowRight size={18} />
+                  </>
+                )}
               </Button>
             </div>
             <div className="mt-4 text-center text-sm">
