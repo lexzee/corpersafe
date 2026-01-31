@@ -11,7 +11,6 @@ async function Authenticated({ children }: { children: React.ReactNode }) {
     redirect("/auth/login");
   }
 
-  //   return JSON.stringify(data.claims, null, 2);
   return <>{children}</>;
 }
 
