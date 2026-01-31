@@ -18,32 +18,43 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { getDistanceFromLatLonInKm, updateStatus } from "@/lib/utils";
 import { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import {
+  History,
+  User as UserIcon,
+  MapPin,
+  Plus,
+  ChevronRight,
+  ArrowLeft,
+} from "lucide-react";
 
 const UserMapView = dynamic(
   () => import("@/components/map-views").then((mod) => mod.UserMapView),
   { ssr: false },
 );
 
-export function PCMContent({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+function TrackingView({
+  user,
+  trip,
+  setTrip,
+  onBack,
+}: {
+  user: User | null;
+  trip: any;
+  setTrip: any;
+  onBack: () => void;
+}) {
   const supabase = createClient();
-  const router = useRouter();
 
   const [showPauseModal, setShowPauseModal] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
-  const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
   const [speed, setSpeed] = useState(0);
   const [gpsAccuracy, setGpsAccuracy] = useState(0);
-  const [trip, setTrip] = useState<any>({});
   const [currentLoc, setCurrentLoc] = useState<[number, number]>([
     0.343234, 0.243244,
   ]);
@@ -58,53 +69,12 @@ export function PCMContent({
   // Log throttling
   const lastLogTimeRef = useRef<number>(0);
 
-  //   1. fetch user
+  // Initialize location from trip data if available
   useEffect(() => {
-    const fetchUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) setUser(user);
-      else router.push("/auth/login");
-      setAuthLoading(false);
-    };
-
-    fetchUser();
-  }, []);
-
-  useEffect(() => {
-    const fetchTrip = async () => {
-      try {
-        const { data, error } = await supabase
-          .from("trips")
-          .select("*")
-          .eq("pcm_id", user?.id)
-          .neq("status", "completed")
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (error?.message) throw error;
-        if (data) {
-          setTrip(data);
-          // Set map to last known db location if available
-          if (data.current_lat)
-            setCurrentLoc([data.current_lat, data.current_lng]);
-          setLoading(false);
-        } else {
-          router.push("/register-trip");
-        }
-      } catch (err: any) {
-        console.error("Error fetching trip:", err?.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (user) {
-      fetchTrip();
+    if (trip?.current_lat) {
+      setCurrentLoc([trip.current_lat, trip.current_lng]);
     }
-  }, [user, authLoading]);
+  }, []);
 
   //   Real-time GPS Tracking
   useEffect(() => {
@@ -267,18 +237,6 @@ export function PCMContent({
     setShowPauseModal(false);
   };
 
-  if (loading || authLoading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background flex-col gap-4">
-        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
-        <p className="text-muted-foreground text-sm">
-          Loading Mission Control...
-        </p>
-        <LogoutButton />
-      </div>
-    );
-  }
-
   if (!trip) return null;
 
   if (trip.status === "pending") {
@@ -293,6 +251,12 @@ export function PCMContent({
 
   return (
     <div className="pb-24 min-h-screen bg-muted/30">
+      <div className="bg-background border-b border-border p-2 sticky top-0 z-50">
+        <Button variant="ghost" size="sm" onClick={onBack} className="gap-2">
+          <ArrowLeft size={16} /> Back to Dashboard
+        </Button>
+      </div>
+
       <UserNavbar status="" currentLoc={currentLoc} />
 
       <div className="max-w-md mx-auto p-4 space-y-4">
@@ -377,6 +341,161 @@ export function PCMContent({
           confirmPause={confirmPause}
         />
       )}
+    </div>
+  );
+}
+
+export function PCMContent({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<"div">) {
+  const supabase = createClient();
+  const router = useRouter();
+
+  const [view, setView] = useState<"dashboard" | "tracking">("dashboard");
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [trip, setTrip] = useState<any>(null);
+
+  // 1. Fetch User & Trip
+  useEffect(() => {
+    const init = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/auth/login");
+        return;
+      }
+      setUser(user);
+
+      // Fetch active trip
+      const { data } = await supabase
+        .from("trips")
+        .select("*")
+        .eq("pcm_id", user.id)
+        .neq("status", "completed")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (data) setTrip(data);
+      setLoading(false);
+    };
+
+    init();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background flex-col gap-4">
+        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div>
+        <p className="text-muted-foreground text-sm">
+          Loading Mission Control...
+        </p>
+      </div>
+    );
+  }
+
+  if (view === "tracking" && trip) {
+    return (
+      <TrackingView
+        user={user}
+        trip={trip}
+        setTrip={setTrip}
+        onBack={() => setView("dashboard")}
+      />
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-muted/30 p-4 pb-24 space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-muted-foreground text-sm">
+            Welcome, {user?.user_metadata?.full_name}
+          </p>
+        </div>
+        <LogoutButton />
+      </div>
+
+      {/* Active Trip Section */}
+      <Card className="border-primary/20 shadow-md overflow-hidden relative">
+        <div className="absolute top-0 left-0 w-1 h-full bg-primary"></div>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <MapPin className="text-primary h-5 w-5" />
+            Current Trip
+          </CardTitle>
+          <CardDescription>
+            {trip
+              ? trip.status === "active"
+                ? "Trip in progress"
+                : "Trip paused"
+              : "No active trip"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {trip ? (
+            <div className="space-y-4">
+              <div className="flex justify-between items-center bg-muted/50 p-3 rounded-lg">
+                <div className="text-sm">
+                  <p className="text-muted-foreground text-xs uppercase font-bold">
+                    Destination
+                  </p>
+                  <p className="font-medium">{trip.destination_state}</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-muted-foreground text-xs uppercase font-bold">
+                    Status
+                  </p>
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary/10 text-primary uppercase">
+                    {trip.status}
+                  </span>
+                </div>
+              </div>
+              <Button className="w-full" onClick={() => setView("tracking")}>
+                View Live Tracking <ChevronRight className="ml-2 h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <Button
+              className="w-full"
+              onClick={() => router.push("/register-trip")}
+            >
+              <Plus className="mr-2 h-4 w-4" /> Start New Trip
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 gap-4">
+        <Card
+          className="hover:bg-muted/50 transition-colors cursor-pointer"
+          onClick={() => router.push("/history")}
+        >
+          <CardContent className="p-6 flex flex-col items-center justify-center gap-3 text-center">
+            <div className="p-3 bg-blue-100 text-blue-600 rounded-full dark:bg-blue-900/20 dark:text-blue-400">
+              <History className="h-6 w-6" />
+            </div>
+            <span className="font-medium">History</span>
+          </CardContent>
+        </Card>
+        <Card
+          className="hover:bg-muted/50 transition-colors cursor-pointer"
+          onClick={() => router.push("/profile")}
+        >
+          <CardContent className="p-6 flex flex-col items-center justify-center gap-3 text-center">
+            <div className="p-3 bg-purple-100 text-purple-600 rounded-full dark:bg-purple-900/20 dark:text-purple-400">
+              <UserIcon className="h-6 w-6" />
+            </div>
+            <span className="font-medium">Profile</span>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

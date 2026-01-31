@@ -88,7 +88,7 @@ export function AdminNavbar({
   };
 
   return (
-    <>
+    <div className="flex items-center justify-between w-full">
       {/* ... (Left side logo) ... */}
       <div className="flex items-center gap-3">
         <div className="bg-primary/10 p-2 rounded-lg">
@@ -124,13 +124,13 @@ export function AdminNavbar({
         )}
 
         {/* Manage Staff Button */}
-        <ManageStaffButton />
+        {/* <ManageStaffButton /> */}
 
         <ThemeSwitcher />
 
         {/* Logout Button */}
         <LogoutButton />
       </div>
-    </>
+    </div>
   );
 }
