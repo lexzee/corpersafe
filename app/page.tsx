@@ -184,7 +184,7 @@ export default function Home() {
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                 <Button size="lg" asChild>
                   <Link href="/register-trip">
-                    <Navigation />
+                    <Navigation className="mr-2 h-4 w-4" />
                     Start a Trip
                   </Link>
                 </Button>
@@ -203,8 +203,9 @@ export default function Home() {
                     className="w-full sm:w-64 pl-10 pr-20 py-4 rounded-xl border-2 focus:border-primary uppercase font-mono transition-all group-hover:border-muted-foreground"
                   />
                   <Button
+                    size="sm"
                     variant="secondary"
-                    className="absolute right-2 top-2 bottom-2"
+                    className="absolute right-2 top-1/2 -translate-y-1/2"
                     onClick={handleTrack}
                   >
                     Track
@@ -302,11 +303,60 @@ export default function Home() {
         </div>
       </div>
 
+      {/* --- How It Works --- */}
+      <section className="py-16 bg-background border-b border-border/50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="text-2xl font-bold tracking-tight">How It Works</h2>
+            <p className="text-muted-foreground">
+              Simple steps to ensure your safety
+            </p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-8">
+            {[
+              {
+                step: "01",
+                title: "Register Trip",
+                desc: "Enter vehicle details and destination before you move.",
+              },
+              {
+                step: "02",
+                title: "Share Code",
+                desc: "Send your unique Tracking ID to parents or guardians.",
+              },
+              {
+                step: "03",
+                title: "Stay Safe",
+                desc: "We monitor your journey and alert authorities in emergencies.",
+              },
+            ].map((s, i) => (
+              <div
+                key={i}
+                className="relative p-6 rounded-2xl border bg-card hover:shadow-md transition-all group"
+              >
+                <div className="text-6xl font-black text-muted/20 absolute -top-4 -right-2 group-hover:text-primary/10 transition-colors select-none">
+                  {s.step}
+                </div>
+                <h3 className="text-lg font-bold mb-2 relative z-10">
+                  {s.title}
+                </h3>
+                <p className="text-sm text-muted-foreground relative z-10">
+                  {s.desc}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* --- Features Section --- */}
-      <div id="features" className="py-24 bg-background">
+      <div id="features" className="py-24 bg-secondary/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold tracking-tight">
+            <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-4">
+              Features
+            </div>
+            <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
               Safety at Every Mile
             </h2>
             <p className="mt-4 text-muted-foreground max-w-2xl mx-auto">
@@ -320,7 +370,7 @@ export default function Home() {
               {
                 icon: <CheckCircle className="w-8 h-8 text-primary" />,
                 title: "Vehicle Registry",
-                desc: "Don't board blindly.Verify the plate number against our national transport database before you enter.",
+                desc: "Don't board blindly. Verify the plate number against our national transport database before you enter.",
               },
               {
                 icon: <Radio className="w-8 h-8 text-blue-600" />,
@@ -335,12 +385,12 @@ export default function Home() {
               {
                 icon: <History className="w-8 h-8 text-destructive" />,
                 title: "Trip History",
-                desc: "Keep a log of all your journeys. Replay your exact route on a map to show family where you went",
+                desc: "Keep a log of all your journeys. Replay your exact route on a map to show family where you went.",
               },
             ].map((feature, idx) => (
               <Card
                 key={idx}
-                className="hover:shadow-xl transition duration-300 group"
+                className="hover:shadow-xl transition duration-300 group border-none shadow-md"
               >
                 <CardHeader>
                   <div className="mb-4 bg-background w-14 h-14 rounded-xl flex items-center justify-center shadow-sm border group-hover:scale-110 transition">
@@ -362,14 +412,14 @@ export default function Home() {
       {/* --- Role Selection (Audience) --- */}
       <div
         id="roles"
-        className="py-24 bg-secondary text-foreground relative overflow-hidden"
+        className="py-24 bg-background text-foreground relative overflow-hidden border-t"
       >
         {/* BG Pattern */}
         <div
           className="absolute inset-0 opacity-5"
           style={{
             backgroundImage:
-              "radia-gradient(hsl(var(--foreground)) 1px, transparent 1px)",
+              "radial-gradient(hsl(var(--foreground)) 1px, transparent 1px)",
             backgroundSize: "30px 30px",
           }}
         ></div>
@@ -377,7 +427,7 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="grid md:grid-cols-3 gap-8">
             {/* Card 1: PCM */}
-            <Card className="bg-background relative overflow-hidden group hover:border-primary/50 transition duration-300">
+            <Card className="bg-secondary/50 relative overflow-hidden group hover:border-primary/50 transition duration-300 border-2">
               <div className="absolute top-0 right-0 bg-primary w-24 h-24 rounded-bl-full -mr-4 -mt-4 opacity-10 group-hover:opacity-20 transition"></div>
               <CardHeader>
                 <Navigation className="w-10 h-10 text-primary mb-6" />
@@ -397,7 +447,7 @@ export default function Home() {
             </Card>
 
             {/* Card 2: Family */}
-            <Card className="bg-background relative overflow-hidden group hover:border-blue-500/50 transition duration-300">
+            <Card className="bg-secondary/50 relative overflow-hidden group hover:border-blue-500/50 transition duration-300 border-2">
               <div className="absolute top-0 right-0 bg-blue-600 w-24 h-24 rounded-bl-full -mr-4 -mt-4 opacity-10 group-hover:opacity-20 transition"></div>
               <CardHeader>
                 <Users className="w-10 h-10 text-blue-400 mb-6" />
@@ -421,7 +471,7 @@ export default function Home() {
             </Card>
 
             {/* Card 3: Admin */}
-            <Card className="bg-background relative overflow-hidden group hover:border-amber-500/50 transition duration-300">
+            <Card className="bg-secondary/50 relative overflow-hidden group hover:border-amber-500/50 transition duration-300 border-2">
               <div className="absolute top-0 right-0 bg-amber-600 w-24 h-24 rounded-bl-full -mr-4 -mt-4 opacity-10 group-hover:opacity-20 transition"></div>
               <CardHeader>
                 <Shield className="w-10 h-10 text-amber-400 mb-6" />
