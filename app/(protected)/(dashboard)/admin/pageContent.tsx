@@ -1,7 +1,7 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { runSafetyCheck, timeAgo, tripIsStale } from "@/lib/utils";
-import { AdminMapView } from "@/components/map-views";
 import { AdminNavbar } from "@/components/navbar";
 import { AdminSidebar } from "@/components/sidebar";
 import { Loader2 } from "lucide-react";
@@ -9,6 +9,11 @@ import { createClient } from "@/lib/supabase/client";
 import { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useRef } from "react";
+
+const AdminMapView = dynamic(
+  () => import("@/components/map-views").then((mod) => mod.AdminMapView),
+  { ssr: false },
+);
 
 export function AdminContent({
   className,

@@ -21,12 +21,29 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { createClient } from "@/lib/supabase/client";
+import { User } from "@supabase/supabase-js";
+import { LogoutButton } from "@/components/logout-button";
 
 export default function Home() {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const supabase = createClient();
   const redirect = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [trackCode, setTrackCode] = useState("");
   const [year, setYear] = useState<number | null>(null);
+
+  useEffect(() => {
+    const fetchUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (user) setUser(user);
+    };
+
+    fetchUser();
+  }, []);
 
   useEffect(() => {
     setYear(new Date().getFullYear());
@@ -69,11 +86,15 @@ export default function Home() {
               >
                 For Parents
               </Link>
-              <Button variant="ghost" asChild>
-                <Link href="/auth/login">Login</Link>
-              </Button>
+              {user ? (
+                <LogoutButton />
+              ) : (
+                <Button variant="ghost" asChild>
+                  <Link href="/auth/login">Login</Link>
+                </Button>
+              )}
               <Button asChild>
-                <Link href="/register">Register Trip</Link>
+                <Link href="/register-trip">Register Trip</Link>
               </Button>
             </div>
 
@@ -104,13 +125,17 @@ export default function Home() {
             >
               For Parents
             </a>
-            <Button variant="ghost" asChild className="w-full justify-start">
-              <Link href="/auth/login" onClick={() => setIsMenuOpen(false)}>
-                Login
-              </Link>
-            </Button>
+            {user ? (
+              <LogoutButton />
+            ) : (
+              <Button variant="ghost" asChild className="w-full justify-start">
+                <Link href="/auth/login" onClick={() => setIsMenuOpen(false)}>
+                  Login
+                </Link>
+              </Button>
+            )}
             <Button asChild className="w-full">
-              <Link href="/register" onClick={() => setIsMenuOpen(false)}>
+              <Link href="/register-trip" onClick={() => setIsMenuOpen(false)}>
                 Start Journey
               </Link>
             </Button>
@@ -158,7 +183,7 @@ export default function Home() {
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
                 <Button size="lg" asChild>
-                  <Link href="/register">
+                  <Link href="/register-trip">
                     <Navigation />
                     Start a Trip
                   </Link>
@@ -364,7 +389,7 @@ export default function Home() {
                   share your live location link.
                 </p>
                 <Button variant="link" asChild>
-                  <Link href="/register">
+                  <Link href="/register-trip">
                     Start Here <ArrowRight className="ml-2" />
                   </Link>
                 </Button>

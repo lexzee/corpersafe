@@ -58,7 +58,7 @@ export function PCMContent({
   // Log throttling
   const lastLogTimeRef = useRef<number>(0);
 
-  //   1. fetch user and trip
+  //   1. fetch user
   useEffect(() => {
     const fetchUser = async () => {
       const {
@@ -279,6 +279,8 @@ export function PCMContent({
     );
   }
 
+  if (!trip) return null;
+
   if (trip.status === "pending") {
     return (
       <TripPending
@@ -290,7 +292,7 @@ export function PCMContent({
   }
 
   return (
-    <div className="pb-24 min-h-screen bg-background">
+    <div className="pb-24 min-h-screen bg-muted/30">
       <UserNavbar status="" currentLoc={currentLoc} />
 
       <div className="max-w-md mx-auto p-4 space-y-4">
@@ -299,34 +301,43 @@ export function PCMContent({
         {/* Speed Card */}
         <div className="grid grid-cols-3 gap-3">
           <Card className="col-span-2">
-            <CardHeader className="font-bold">
-              <CardDescription className="uppercase">
+            <CardHeader className="pb-2">
+              <CardDescription className="uppercase text-xs font-bold tracking-wider">
                 Destination
               </CardDescription>
-              <CardTitle className=" truncate">
+              <CardTitle className="truncate text-lg leading-tight">
                 {trip.destination_state} Camp
               </CardTitle>
             </CardHeader>
 
-            <CardContent className="flex items-end gap-1">
-              <span className="text-3xl font-black font-mono">{speed}</span>
-              <span className="text-xs font-bold mb-1 text-accent">km/h</span>
+            <CardContent className="flex items-end gap-1 pb-4">
+              <span className="text-4xl font-black font-mono tracking-tighter">
+                {speed}
+              </span>
+              <span className="text-sm font-bold mb-1.5 text-muted-foreground">
+                km/h
+              </span>
             </CardContent>
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Accuracy</CardTitle>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs font-bold uppercase text-muted-foreground">
+                GPS
+              </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pb-4">
+              <div className="text-xl font-bold mb-2">
+                {Math.round(gpsAccuracy)}
+                <span className="text-xs font-normal text-muted-foreground ml-0.5">
+                  m
+                </span>
+              </div>
               <div
-                className={`h-2 w-full rounded-full ${
-                  gpsAccuracy < 20 ? "bg-green-500" : "bg-yellow-500"
+                className={`h-1.5 w-full rounded-full ${
+                  gpsAccuracy < 20 ? "bg-primary" : "bg-yellow-500"
                 }`}
               ></div>
-              <span className="text-xs font-bold">
-                {Math.round(gpsAccuracy)}m
-              </span>
             </CardContent>
           </Card>
         </div>
@@ -335,7 +346,7 @@ export function PCMContent({
         <TrackingID tracking_code={trip.tracking_code} />
 
         {/* Map */}
-        <div className="h-64 bg-muted rounded-2xl overflow-hidden border-2 border-border shadow-sm relative z-0">
+        <div className="h-64 bg-card rounded-2xl overflow-hidden border border-border shadow-sm relative z-0">
           <UserMapView currentLoc={currentLoc} speed={speed} trip={trip} />
         </div>
 

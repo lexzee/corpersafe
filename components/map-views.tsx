@@ -79,6 +79,7 @@ export function AdminMapView({
     <div className="flex-1 relative bg-muted hidden md:block">
       <MapContainer center={[9.082, 8.6753]} zoom={9} className="h-full w-full">
         <TileLayer
+          key={resolvedTheme}
           attribution="&copy; OpenStreetMap"
           url={
             resolvedTheme === "dark"
@@ -129,6 +130,7 @@ export function UserMapView({ currentLoc, speed, trip }: any) {
         className="h-full w-full"
       >
         <TileLayer
+          key={resolvedTheme}
           url={
             resolvedTheme === "dark"
               ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"

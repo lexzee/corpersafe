@@ -74,7 +74,10 @@ export function PauseResumeButton({
 export function ArrivedButton({ trip, currentLoc, setTrip }: any) {
   return (
     <button
-      onClick={() => updateStatus("completed", null, trip, setTrip, currentLoc)}
+      onClick={() => {
+        updateStatus("completed", null, trip, setTrip, currentLoc);
+        redirect("/");
+      }}
       className="bg-primary border-2 border-primary text-primary-foreground p-4 rounded-xl flex flex-col items-center justify-center gap-2 font-bold hover:bg-primary/90 transition shadow-md shadow-primary/20 active:scale-95"
     >
       <CheckCircle size={24} /> Arrived
