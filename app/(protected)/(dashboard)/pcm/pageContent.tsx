@@ -368,7 +368,7 @@ export function PCMContent({
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push("/auth/login");
+        // router.push("/auth/login");
         return;
       }
       setUser(user);

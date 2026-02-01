@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useState } from "react";
+import { AlertCircle, Loader2, Shield } from "lucide-react";
 
 export function ForgotPasswordForm({
   className,
@@ -48,12 +49,21 @@ export function ForgotPasswordForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       {success ? (
         <Card>
-          <CardHeader>
+          <CardHeader className="text-center animate-in slide-in-from-top duration-500">
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center gap-2 text-primary font-bold text-xl mb-2"
+            >
+              <div className="bg-background p-2 rounded-lg">
+                <Shield className="fill-primary text-secondary-foreground w-6 h-6" />
+              </div>
+              CorperSafe
+            </Link>
             <CardTitle className="text-2xl">Check Your Email</CardTitle>
             <CardDescription>Password reset instructions sent</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground text-center">
               If you registered using your email and password, you will receive
               a password reset email.
             </p>
@@ -61,7 +71,16 @@ export function ForgotPasswordForm({
         </Card>
       ) : (
         <Card>
-          <CardHeader>
+          <CardHeader className="text-center animate-in slide-in-from-top duration-500">
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center gap-2 text-primary font-bold text-xl mb-2"
+            >
+              <div className="bg-background p-2 rounded-lg">
+                <Shield className="fill-primary text-secondary-foreground w-6 h-6" />
+              </div>
+              CorperSafe
+            </Link>
             <CardTitle className="text-2xl">Reset Your Password</CardTitle>
             <CardDescription>
               Type in your email and we&apos;ll send you a link to reset your
@@ -69,6 +88,12 @@ export function ForgotPasswordForm({
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {error && (
+              <div className="mb-6 bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 border border-red-100">
+                <AlertCircle size={16} />
+                {error}
+              </div>
+            )}
             <form onSubmit={handleForgotPassword}>
               <div className="flex flex-col gap-6">
                 <div className="grid gap-2">
@@ -82,9 +107,12 @@ export function ForgotPasswordForm({
                     onChange={(e) => setEmail(e.target.value)}
                   />
                 </div>
-                {error && <p className="text-sm text-red-500">{error}</p>}
                 <Button type="submit" className="w-full" disabled={isLoading}>
-                  {isLoading ? "Sending..." : "Send reset email"}
+                  {isLoading ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    "Send reset email"
+                  )}
                 </Button>
               </div>
               <div className="mt-4 text-center text-sm">

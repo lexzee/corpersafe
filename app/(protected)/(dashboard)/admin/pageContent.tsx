@@ -167,7 +167,7 @@ export function AdminContent({
       const { data, error } = await supabase.auth.getUser();
       if (error) {
         console.error(error.message);
-        router.push("/auth/login");
+        // router.push("/auth/login");
       } else {
         setUser(data.user);
       }

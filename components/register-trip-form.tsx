@@ -64,7 +64,7 @@ export function RegisterTripForm({
 
   const [stateList, setStateList] = useState<string[]>([]);
   const [schoolList, setSchoolList] = useState<
-    { category: string; names: string[] }[]
+    { category: string; items: string[] }[]
   >([]);
 
   useEffect(() => {
@@ -74,9 +74,6 @@ export function RegisterTripForm({
         data: { user },
       } = await supabase.auth.getUser();
       if (user) setUser(user);
-      else {
-        router.push("/auth/login");
-      }
 
       // Fetch States
       const { data: states } = await supabase
@@ -98,9 +95,9 @@ export function RegisterTripForm({
         );
         const other = schools.filter((s) => s.category === "Other");
         setSchoolList([
-          { category: "Universities", names: universities.map((s) => s.name) },
-          { category: "Polytechnics", names: polytechnics.map((s) => s.name) },
-          { category: "Other", names: other.map((s) => s.name) },
+          { category: "Universities", items: universities.map((s) => s.name) },
+          { category: "Polytechnics", items: polytechnics.map((s) => s.name) },
+          { category: "Other", items: other.map((s) => s.name) },
         ]);
       }
     };
@@ -299,7 +296,10 @@ export function RegisterTripForm({
                           <MapPin size={20} />
                         </InputGroupAddon>
                       </ComboboxInput>
-                      <ComboboxContent alignOffset={-28} className="w-72">
+                      <ComboboxContent
+                        alignOffset={-28}
+                        className="w-72 max-h-60 overflow-y-auto"
+                      >
                         <ComboboxEmpty>No states found.</ComboboxEmpty>
                         <ComboboxList>
                           {(state, index) => (
@@ -342,6 +342,9 @@ export function RegisterTripForm({
                       items={schoolList}
                       autoHighlight
                       inputValue={institution}
+                      onInputValueChange={(e: string | null) =>
+                        setInstitution(e || "")
+                      }
                       onValueChange={(e: string | null) => {
                         e && setInstitution(e);
                         console.log(e);
@@ -354,13 +357,16 @@ export function RegisterTripForm({
                           <Building2 size={20} />
                         </InputGroupAddon>
                       </ComboboxInput>
-                      <ComboboxContent alignOffset={-28} className="w-72">
+                      <ComboboxContent
+                        alignOffset={-28}
+                        className="w-72 max-h-60 overflow-y-auto"
+                      >
                         <ComboboxEmpty>No states found.</ComboboxEmpty>
                         <ComboboxList>
                           {(group) => (
                             <ComboboxGroup
                               key={group.category}
-                              items={group.names}
+                              items={group.items}
                             >
                               <ComboboxLabel>{group.category}</ComboboxLabel>
                               <ComboboxCollection>

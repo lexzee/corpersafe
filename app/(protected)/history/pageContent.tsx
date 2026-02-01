@@ -42,7 +42,7 @@ export default function HistoryContent() {
         data: { user },
       } = await supabase.auth.getUser();
       if (user) setUser(user);
-      else router.push("/auth/login");
+      // else router.push("/auth/login");
     };
     fetchUser();
   }, []);
