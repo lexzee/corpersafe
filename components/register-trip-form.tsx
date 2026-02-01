@@ -48,7 +48,7 @@ export function RegisterTripForm({
   const [user, setUser] = useState<any>(null);
 
   const [origin, setOrigin] = useState("");
-  const [destination, setDestination] = useState("");
+  const [destination, setDestination] = useState<any>(null);
   const [nextOfKin, setNextOfKin] = useState("");
   const [nextOfKinEmail, setNextOfKinEmail] = useState("");
   const [institution, setInstitution] = useState("");
@@ -62,7 +62,9 @@ export function RegisterTripForm({
     lng: number;
   } | null>(null);
 
-  const [stateList, setStateList] = useState<string[]>([]);
+  const [stateList, setStateList] = useState<
+    { state: string; campName: string }[]
+  >([]);
   const [schoolList, setSchoolList] = useState<
     { category: string; items: string[] }[]
   >([]);
@@ -78,9 +80,9 @@ export function RegisterTripForm({
       // Fetch States
       const { data: states } = await supabase
         .from("allowed_states")
-        .select("name")
-        .order("name");
-      if (states) setStateList(states.map((s) => s.name));
+        .select("state, campName")
+        .order("state");
+      if (states) setStateList(states);
 
       // Fetch Schools
       const { data: schools } = await supabase
@@ -160,6 +162,12 @@ export function RegisterTripForm({
     setIsLoading(true);
     setError(null);
 
+    if (!user) {
+      setError("User not authenticated");
+      setIsLoading(false);
+      return;
+    }
+
     const userId = user.id;
 
     try {
@@ -178,9 +186,10 @@ export function RegisterTripForm({
 
       const { error: tripError } = await supabase.from("trips").insert({
         pcm_id: userId,
-        plate_number: "LAG-XYZ-123",
+        plate_number: "",
         origin,
-        destination_state: destination,
+        destination_state: destination?.state || "",
+        destination_camp: destination?.campName || "",
         institution,
         status: "pending",
         tracking_code: trackingCode,
@@ -275,17 +284,30 @@ export function RegisterTripForm({
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="destination">Destination Sate (Camp)</Label>
+                    <Label htmlFor="destination">
+                      Destination State (Camp)
+                    </Label>
                     <Combobox
                       items={stateList}
                       autoHighlight
-                      onInputValueChange={(e: string | null) =>
-                        setDestination(e!)
+                      onValueChange={(
+                        e: { state: string; campName: string } | null,
+                      ) => {
+                        setDestination(e);
+                      }}
+                      filter={(item, search) =>
+                        // @ts-ignore
+                        item.state
+                          .toLowerCase()
+                          .includes(search.toLowerCase()) ||
+                        // @ts-ignore
+                        item.campName
+                          .toLowerCase()
+                          .includes(search.toLowerCase())
                       }
                       required
                       highlightItemOnHover
                       id="destination"
-                      inputValue={destination}
                     >
                       <ComboboxInput
                         placeholder="Select Destination Camp"
@@ -302,9 +324,18 @@ export function RegisterTripForm({
                       >
                         <ComboboxEmpty>No states found.</ComboboxEmpty>
                         <ComboboxList>
-                          {(state, index) => (
-                            <ComboboxItem key={index} value={state}>
-                              {state}
+                          {(item) => (
+                            <ComboboxItem
+                              key={item.state}
+                              value={item}
+                              className="py-2"
+                            >
+                              <div className="flex flex-col text-left">
+                                <span className="font-bold">{item.state}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {item.campName}
+                                </span>
+                              </div>
                             </ComboboxItem>
                           )}
                         </ComboboxList>
