@@ -125,8 +125,8 @@ export const updateStatus = async (
   if (status === "completed") {
     try {
       if (typeof window !== "undefined") {
-        window.history.pushState({}, "", "/");
-        window.dispatchEvent(new PopStateEvent("popstate"));
+        window.location.href = "/pcm";
+        window.location.reload();
       }
     } catch (e) {
       if (typeof window !== "undefined") window.location.href = "/";

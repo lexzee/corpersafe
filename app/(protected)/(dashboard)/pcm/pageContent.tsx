@@ -39,12 +39,10 @@ const UserMapView = dynamic(
 );
 
 function TrackingView({
-  user,
   trip,
   setTrip,
   onBack,
 }: {
-  user: User | null;
   trip: any;
   setTrip: any;
   onBack: () => void;
@@ -78,6 +76,11 @@ function TrackingView({
 
   //   Real-time GPS Tracking
   useEffect(() => {
+    if (!navigator.geolocation) {
+      alert("Geolocation is not supported by your browser.");
+      return;
+    }
+
     if (!trip || trip.status === "completed" || trip.status === "pending")
       return;
 
@@ -401,7 +404,6 @@ export function PCMContent({
   if (view === "tracking" && trip) {
     return (
       <TrackingView
-        user={user}
         trip={trip}
         setTrip={setTrip}
         onBack={() => setView("dashboard")}
@@ -463,7 +465,7 @@ export function PCMContent({
           ) : (
             <Button
               className="w-full"
-              onClick={() => router.push("/register-trip")}
+              onClick={() => router.replace("/register-trip")}
             >
               <Plus className="mr-2 h-4 w-4" /> Start New Trip
             </Button>
