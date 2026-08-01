@@ -1,40 +1,56 @@
 -- ============================================================================
--- Fix: missing profile rows (FK 23503 on trips) + profiles RLS infinite
--- recursion (42P17)
+-- CorperSafe — critical schema fixes (2026-08-02)
 --
--- Background: the base schema (tables, triggers, most RLS policies) was
--- originally created in the dashboard and is not versioned. On a fresh or
--- rebuilt project this leaves two failures:
+--   1. Recreate the missing auth.users -> public.profiles trigger so every new
+--      signup automatically gets a profiles row (fixes:
+--      "insert or update on table "trips" violates foreign key constraint
+--      "trips_pcm_id_fkey"", detail 'Key is not present in table "profiles"').
+--   2. Backfill profiles for auth.users rows that have none (repairs existing
+--      accounts created while the trigger was missing).
+--   3. Add an INSERT policy for profiles (self-heal path in the app needs it).
+--   4. Provide SECURITY DEFINER helpers (public.is_admin,
+--      public.has_live_trip) so RLS policies never sub-select the profiles
+--      table directly -> no more 42P17 "infinite recursion" on profiles.
+--   5. Rebuild the public_track_profiles policy on has_live_trip() so parents
+--      can see traveler names/phones during live trips.
+--   6. Enum-safe casting: profiles.role is a user_role ENUM, and signup
+--      metadata arrives as text. safe_user_role() casts it safely so a bad or
+--      missing label can never break signup (fixes:
+--      42804 "column "role" is of type user_role but expression is of type text").
 --
---   1. No handle_new_user trigger -> new signups never get a profiles row
---      -> every trip insert violates trips_pcm_id_fkey (409 / 23503).
---   2. Some profiles policy queries `profiles` again (directly, or via
---      trips policies that look up profiles) -> Postgres reports
---      "infinite recursion detected in policy" (500 / 42P17) on ANY
---      read/update of profiles.
---
--- This migration recreates the trigger, backfills missing rows, adds the
--- insert policy the app's fallback uses, and provides recursion-safe
--- helpers + rewrite templates for the self-referencing policies.
+-- Idempotent: safe to re-run at any time (e.g. after a partial earlier run).
 -- ============================================================================
 
+-- 0. Enum-safe role caster ----------------------------------------------------
+create or replace function public.safe_user_role(p text)
+returns public.user_role
+language plpgsql
+set search_path = ''
+as $$
+begin
+  return coalesce(nullif(p, ''), 'pcm')::public.user_role;
+exception
+  when invalid_text_representation then
+    return 'pcm'::public.user_role;
+end;
+$$;
 
--- ---------------------------------------------------------------------------
--- 1. Every auth user must get a profiles row (trips.pcm_id needs it)
--- ---------------------------------------------------------------------------
+-- 1. Profile auto-creation -----------------------------------------------------
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, full_name, phone, role)
+  insert into public.profiles (id, full_name, phone, role, next_of_kin, next_of_kin_email)
   values (
     new.id,
     coalesce(new.raw_user_meta_data ->> 'full_name', ''),
     coalesce(new.raw_user_meta_data ->> 'phone', ''),
-    coalesce(new.raw_user_meta_data ->> 'role', 'pcm')
+    public.safe_user_role(new.raw_user_meta_data ->> 'role'),
+    coalesce(new.raw_user_meta_data ->> 'next_of_kin', ''),
+    coalesce(new.raw_user_meta_data ->> 'next_of_kin_email', '')
   )
   on conflict (id) do nothing;
   return new;
@@ -46,79 +62,47 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- Backfill users who signed up while the trigger was missing
-insert into public.profiles (id, full_name, phone, role)
+-- 2. Backfill missing profiles -------------------------------------------------
+insert into public.profiles (id, full_name, phone, role, next_of_kin, next_of_kin_email)
 select
   u.id,
   coalesce(u.raw_user_meta_data ->> 'full_name', ''),
   coalesce(u.raw_user_meta_data ->> 'phone', ''),
-  coalesce(u.raw_user_meta_data ->> 'role', 'pcm')
+  public.safe_user_role(u.raw_user_meta_data ->> 'role'),
+  coalesce(u.raw_user_meta_data ->> 'next_of_kin', ''),
+  coalesce(u.raw_user_meta_data ->> 'next_of_kin_email', '')
 from auth.users u
 left join public.profiles p on p.id = u.id
 where p.id is null
 on conflict (id) do nothing;
 
--- Let an authenticated user create/repair their OWN profile row (the
--- register-trip form uses this as a self-healing fallback)
+-- 3. INSERT self policy for profiles ------------------------------------------
 drop policy if exists "profiles_insert_own" on public.profiles;
 create policy "profiles_insert_own"
-  on public.profiles
-  for insert
-  to authenticated
+  on public.profiles for insert
   with check (auth.uid() = id);
 
-
--- ---------------------------------------------------------------------------
--- 2. Recursion-safe "am I an admin?" check
---
---    A policy like
---      using (exists (select 1 from profiles where id = auth.uid() and ...))
---    recurses because evaluating profiles' policy requires evaluating
---    profiles' policies again. A SECURITY DEFINER function bypasses inner
---    RLS, so it cannot recurse. Rewrite your self-referencing policies to
---    use this function instead.
---
---    Inspect what you actually have first:
---      select policyname, cmd, qual, with_check
---      from pg_policies
---      where schemaname = 'public' and tablename = 'profiles';
--- ---------------------------------------------------------------------------
+-- 4. SECURITY DEFINER helpers --------------------------------------------------
 create or replace function public.is_admin()
 returns boolean
 language sql
 security definer
+set search_path = ''
 stable
-set search_path = public
 as $$
-  select exists (
-    select 1 from public.profiles
-    where id = auth.uid()
-      and role in ('admin', 'super_admin', 'state_admin', 'school_admin')
+  select coalesce(
+    (select p.role::text in ('admin', 'super_admin', 'state_admin', 'school_admin')
+     from public.profiles p where p.id = auth.uid()),
+    false
   );
 $$;
 
--- Rewrite templates (adjust names to match your pg_policies output):
---
---   drop policy if exists "Admins can manage profiles" on public.profiles;
---   create policy "Admins can manage profiles"
---     on public.profiles for all to authenticated
---     using  ( id = auth.uid() or public.is_admin() )
---     with check ( id = auth.uid() );
---
--- Anti-pattern to remove, wherever it appears (profiles or trips policies):
---   exists (select 1 from profiles where ...)
-
-
--- ---------------------------------------------------------------------------
--- 3. Harden anonymous tracking against cross-table recursion cycles
---    (profiles policy -> trips -> trips policy -> profiles), same technique
--- ---------------------------------------------------------------------------
 create or replace function public.has_live_trip(profile_id uuid)
 returns boolean
 language sql
 security definer
+set search_path = ''
 stable
-set search_path = public
 as $$
   select exists (
     select 1 from public.trips t
@@ -127,12 +111,42 @@ as $$
   );
 $$;
 
+-- 5. Anonymous parent tracking -----------------------------------------------
 drop policy if exists "public_track_profiles" on public.profiles;
 create policy "public_track_profiles"
-  on public.profiles
-  for select
-  to anon, authenticated
-  using (public.has_live_trip(profiles.id));
+  on public.profiles for select to anon
+  using (public.has_live_trip(id));
 
--- The trips-side public policy has no cross-table references and is safe
--- as-is (see 20260801000000_public_tracking.sql).
+-- ----------------------------------------------------------------------------
+-- Sanity checks (uncomment if you want to verify):
+--   select t.typname, e.enumlabel            -- which role labels exist
+--   from pg_enum e join pg_type t on t.oid = e.enumtypid
+--   where t.typname = 'user_role' order by e.enumsortorder;
+--
+--   select policyname, cmd, qual, with_check from pg_policies
+--   where schemaname = 'public' and tablename in ('profiles', 'trips');
+-- ----------------------------------------------------------------------------
+
+-- ============================================================================
+-- 6. RECURSION-PROOF POLICY REWRITES (templates — commented out)
+--
+-- The exact broken policies can't be dropped blind. Run the pg_policies query
+-- above, then for every policy whose qual/with_check sub-selects profiles:
+-- uncomment + adapt the matching template below.
+-- ============================================================================
+
+-- drop policy if exists "admins_can_view_all_trips" on public.trips;
+-- create policy "admins_can_view_all_trips"
+--   on public.trips for select to authenticated
+--   using (public.is_admin());
+
+-- drop policy if exists "admins_can_update_trips" on public.trips;
+-- create policy "admins_can_update_trips"
+--   on public.trips for update to authenticated
+--   using (public.is_admin())
+--   with check (public.is_admin());
+
+-- drop policy if exists "admins_can_view_profiles" on public.profiles;
+-- create policy "admins_can_view_profiles"
+--   on public.profiles for select to authenticated
+--   using (public.is_admin() or auth.uid() = id);

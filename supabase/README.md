@@ -64,4 +64,17 @@ supabase db push
    from pg_policies
    where schemaname = 'public' and tablename in ('profiles', 'trips');
    ```
+3. If the migration itself fails with
+   `42804: column "role" is of type user_role but expression is of type text`,
+   make sure you're running the latest version of the script (it routes every
+   role through `safe_user_role()`; re-running is safe — earlier partial runs
+   leave the trigger in place and must be overwritten). If casts still fail,
+   list your enum labels — the app needs at least `pcm`:
+
+   ```sql
+   select t.typname, e.enumlabel
+   from pg_enum e join pg_type t on t.oid = e.enumtypid
+   where t.typname = 'user_role'
+   order by e.enumsortorder;
+   ```
 
