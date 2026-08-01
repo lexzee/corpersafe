@@ -64,7 +64,15 @@ supabase db push
    from pg_policies
    where schemaname = 'public' and tablename in ('profiles', 'trips');
    ```
-3. If the migration itself fails with
+3. Promoting a profile to `state_admin`/`school_admin` fails with
+   `42703: column "name" does not exist` inside
+   `validate_role_jurisdiction()` → run
+   `20260802000001_fix_validate_role_jurisdiction.sql` (the function looked up
+   `allowed_states.name`; the real columns are `allowed_states.state` and
+   `allowed_institutions.name`). `state_admin` jurisdictions must match a
+   `allowed_states.state` value; `school_admin` must match an
+   `allowed_institutions.name`.
+4. If the migration itself fails with
    `42804: column "role" is of type user_role but expression is of type text`,
    make sure you're running the latest version of the script (it routes every
    role through `safe_user_role()`; re-running is safe — earlier partial runs

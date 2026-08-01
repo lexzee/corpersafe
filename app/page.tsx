@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { createClient } from "@/lib/supabase/client";
+import { isAdminRole, normalizeTrackingCode } from "@/lib/utils";
 import { User } from "@supabase/supabase-js";
 import { LogoutButton } from "@/components/logout-button";
 
@@ -39,10 +40,20 @@ export default function Home() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      if (user) setUser(user);
+      if (!user) return;
+      setUser(user);
+
+      // Admins don't get the public landing page — straight to Mission Control
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+      if (isAdminRole(profile?.role)) redirect.replace("/admin");
     };
 
     fetchUser();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, []);
 
   useEffect(() => {
@@ -50,9 +61,10 @@ export default function Home() {
   }, []);
 
   const handleTrack = () => {
-    if (trackCode.trim() !== "") {
-      redirect.push(`/track?code=${trackCode.trim()}`);
-    }
+    // Parents paste codes in every format — normalise before navigating
+    // ("53198", "nysc 53198", "NYSC53198" all become "NYSC-53198").
+    const code = normalizeTrackingCode(trackCode);
+    if (code) redirect.push(`/track?code=${encodeURIComponent(code)}`);
   };
 
   return (

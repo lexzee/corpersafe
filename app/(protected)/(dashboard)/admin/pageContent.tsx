@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { runSafetyCheck, timeAgo, tripIsStale } from "@/lib/utils";
+import { isAdminRole, runSafetyCheck, timeAgo, tripIsStale } from "@/lib/utils";
 import { AdminNavbar } from "@/components/navbar";
 import { AdminSidebar } from "@/components/sidebar";
 import {
@@ -172,9 +172,6 @@ function MonitorView({
   );
 }
 
-// Roles allowed into the monitoring portal (profiles.role)
-const ADMIN_ROLES = ["admin", "super_admin", "state_admin", "school_admin"];
-
 export function AdminContent({
   className,
   ...props
@@ -261,7 +258,7 @@ export function AdminContent({
 
     // Non-traveler accounts without a recognized admin role get a
     // friendly rejection instead of silent access to all trips
-    if (!ADMIN_ROLES.includes(profile.role)) {
+    if (!isAdminRole(profile.role)) {
       setUnauthorized(true);
       return;
     }

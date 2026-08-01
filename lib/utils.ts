@@ -21,6 +21,31 @@ export function safeNextPath(value: string | null | undefined) {
   return value.startsWith("/") && !value.startsWith("//") ? value : null;
 }
 
+// Roles with access to the admin monitoring dashboard. Keep in sync with the
+// profiles.role enum / the is_admin() SQL helper.
+export const ADMIN_ROLES = [
+  "admin",
+  "super_admin",
+  "state_admin",
+  "school_admin",
+] as const;
+
+export function isAdminRole(role: string | null | undefined) {
+  return !!role && (ADMIN_ROLES as readonly string[]).includes(role);
+}
+
+// Parents type tracking codes every possible way: "53198", "nysc 53198",
+// "NYSC53198", "NYSC-53198". Normalise to the stored "NYSC-#####" form;
+// returns "" when nothing usable was entered.
+export function normalizeTrackingCode(raw: string | null | undefined) {
+  const compact = (raw ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  const id = compact.replace(/^NYSC-?/, "");
+  return id ? `NYSC-${id}` : "";
+}
+
 export function timeAgo(dateString: string) {
   const seconds = Math.floor(
     (new Date().getTime() - new Date(dateString).getTime()) / 1000,

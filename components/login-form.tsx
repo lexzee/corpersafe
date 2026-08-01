@@ -1,6 +1,6 @@
 "use client";
 
-import { cn, safeNextPath } from "@/lib/utils";
+import { cn, isAdminRole, safeNextPath } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -63,6 +63,13 @@ export function LoginForm({
         // Safe default — the personal dashboard ("/protected" is a route
         // group, not a URL, and 404s)
         router.push("/pcm");
+        return;
+      }
+
+      // Admins always land on Mission Control — they have no business on
+      // trip-registration or preserved public destinations.
+      if (isAdminRole(profile.role)) {
+        router.push("/admin");
         return;
       }
 

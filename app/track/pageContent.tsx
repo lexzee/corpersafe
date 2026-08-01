@@ -17,7 +17,7 @@ import {
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { timeAgo, tripIsStale } from "@/lib/utils";
+import { normalizeTrackingCode, timeAgo, tripIsStale } from "@/lib/utils";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -69,7 +69,12 @@ export default function TrackPageContent({
 
     try {
       // 1. Fetch Trip Data + Driver/PCM Info
-      const cleanCode = codeToTrack.trim().toUpperCase();
+      // Parents type codes every possible way ("53198", "nysc 53198",
+      // "NYSC53198") — normalise to the stored "NYSC-#####" form.
+      const cleanCode = normalizeTrackingCode(codeToTrack);
+      if (!cleanCode) {
+        throw new Error("Enter your Tracking ID, e.g. NYSC-53198");
+      }
       const { data, error } = await supabase
         .from("trips")
         .select("*, profiles(full_name, phone, next_of_kin)")
