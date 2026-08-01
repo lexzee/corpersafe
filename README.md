@@ -25,7 +25,7 @@ Admins see trip on Mission Control ◄── live GPS (watchPosition) ── pho
 | **Parent / Guardian** | **No account needed** | `/track?code=...` live map with plain-language status |
 | **Admin** (`state_admin`, `school_admin`, `admin`, `super_admin`) | Set `profiles.role` in DB | Dashboard + Mission Control: live map of all trips, SOS alarm, acknowledge/resolve incidents, dead-man's-switch signal scan |
 
-> **Roles:** `super_admin` monitors **all** trips (no jurisdiction filter — shows "National Control Center"). Apply `20260802000004_user_role_add_super_admin.sql` + `20260802000005_user_role_drop_group.sql` to guarantee the `super_admin` label exists and to remove the legacy `group` role (existing `group` accounts are migrated to `super_admin`).
+> **Roles live in the `role` column of `public.profiles`** (an enum — shown as `user_role`/`user_roles` under the column, **not** a standalone table). `super_admin` monitors **all** trips (no jurisdiction filter — shows "National Control Center"). Apply `20260802000004_user_role_add_super_admin.sql` + `20260802000005_user_role_drop_group.sql` (in order) to guarantee the `super_admin` label exists and to **remove the legacy `group` role** — existing `group` accounts are promoted to `super_admin`. The migrations resolve the enum type from the column definition, so they work whatever the type is named. Note: PostgreSQL cannot `DROP VALUE` from an enum, so when `group` and `super_admin` already exist side-by-side, migration 05 rebuilds the type to physically remove `group`.
 
 ## Feature highlights
 

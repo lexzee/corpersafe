@@ -83,9 +83,22 @@ supabase db push
    list your enum labels — the app needs at least `pcm`:
 
    ```sql
+   -- Roles live in the `role` column of public.profiles, backed by an enum
+   -- type (named "user_role" or "user_roles" — resolve it from the column so
+   -- the query works under either name):
    select t.typname, e.enumlabel
-   from pg_enum e join pg_type t on t.oid = e.enumtypid
-   where t.typname = 'user_role'
+   from pg_enum e
+   join pg_type t on t.oid = e.enumtypid
+   join pg_attribute a on a.atttypid = t.oid
+   join pg_class c on c.oid = a.attrelid
+   join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname = 'public' and c.relname = 'profiles' and a.attname = 'role'
    order by e.enumsortorder;
    ```
+
+   To promote a legacy `group` account to `super_admin` and drop the `group`
+   role from the enum, run `20260802000004_user_role_add_super_admin.sql`
+   then `20260802000005_user_role_drop_group.sql` (see the comments inside —
+   PostgreSQL can't `DROP VALUE` from an enum, so 05 rebuilds the type when
+   needed).
 
