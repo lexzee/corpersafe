@@ -25,6 +25,8 @@ Admins see trip on Mission Control ◄── live GPS (watchPosition) ── pho
 | **Parent / Guardian** | **No account needed** | `/track?code=...` live map with plain-language status |
 | **Admin** (`state_admin`, `school_admin`, `admin`, `super_admin`) | Set `profiles.role` in DB | Dashboard + Mission Control: live map of all trips, SOS alarm, acknowledge/resolve incidents, dead-man's-switch signal scan |
 
+> **Roles:** `super_admin` monitors **all** trips (no jurisdiction filter — shows "National Control Center"). Apply `20260802000004_user_role_add_super_admin.sql` + `20260802000005_user_role_drop_group.sql` to guarantee the `super_admin` label exists and to remove the legacy `group` role (existing `group` accounts are migrated to `super_admin`).
+
 ## Feature highlights
 
 - **Trip registration** with GPS-detected origin (OSM Nominatim reverse geocode), DB-backed camp/institution pickers, and next-of-kin contacts.
@@ -48,7 +50,7 @@ Create a project at [database.new](https://database.new). You'll need these tabl
 | Table | Purpose |
 |---|---|
 | `profiles` | `full_name`, `phone`, `role`, `jurisdiction`, `next_of_kin`, `next_of_kin_email` |
-| `trips` | journey rows: `pcm_id`, `origin`, `destination_state/camp`, `institution`, `status`, `tracking_code`, `plate_number`, `current_lat/lng`, `current_speed`, `last_updated`, `is_demo` (demo-cleanup migration) |
+| `trips` | journey rows: `pcm_id`, `origin`, `destination_state/camp`, `institution`, `status`, `tracking_code`, `plate_number`, `current_lat/lng`, `current_speed`, `last_updated`, `is_demo` (demo-cleanup migration), `destination_lat/lng` (precise camp coordinates, stored at registration by `20260802000006_trips_destination_coords.sql`) |
 | `trip_logs` | GPS breadcrumb history (route replay) |
 | `alert_logs` | SOS email + admin action audit trail |
 | `allowed_states` / `allowed_institutions` | camp & school pickers |

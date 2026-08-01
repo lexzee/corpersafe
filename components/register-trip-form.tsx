@@ -37,6 +37,7 @@ import {
 } from "./ui/combobox";
 import { InputGroupAddon } from "./ui/input-group";
 import { createClient } from "@/lib/supabase/client";
+import { geocodeCamp } from "@/lib/geo";
 import { useRouter } from "next/navigation";
 
 // allowed_states rows: the camp's host state + its display name
@@ -227,8 +228,24 @@ export function RegisterTripForm({
 
       const trackingCode = "NYSC-" + Math.floor(10000 + Math.random() * 90000);
 
-      // Leave coordinates null when there is no GPS fix — fabricating a
-      // position (e.g. the centre of Nigeria) misleads parents and admins
+      // Pin the CAMP (allowed_states.campName), not the state: one free
+      // Nominatim geocode at registration stores the precise destination
+      // coordinates on the trip, so every dashboard (traveler, parents'
+      // tracker, Mission Control) can mark it without another lookup. If the
+      // geocode fails (offline etc.) the maps fall back to the state
+      // centroid at render time.
+      let destinationLat: number | null = null;
+      let destinationLng: number | null = null;
+      if (destination?.campName) {
+        const coords = await geocodeCamp(destination.campName, destination.state);
+        if (coords) {
+          destinationLat = coords[0];
+          destinationLng = coords[1];
+        }
+      }
+
+      // Leave current coordinates null when there is no GPS fix — fabricating
+      // a position (e.g. the centre of Nigeria) misleads parents and admins
       // watching the map. The trip starts broadcasting real coordinates
       // from the device once the journey begins.
       const { error: tripError } = await supabase.from("trips").insert({
@@ -237,6 +254,8 @@ export function RegisterTripForm({
         origin,
         destination_state: destination?.state || "",
         destination_camp: destination?.campName || "",
+        destination_lat: destinationLat,
+        destination_lng: destinationLng,
         institution,
         status: "pending",
         tracking_code: trackingCode,

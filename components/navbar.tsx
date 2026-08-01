@@ -78,6 +78,7 @@ export function AdminNavbar({
   setTrips,
   user,
   profile,
+  trips,
 }: any) {
   const supabase = createClient();
   const [demoArmed, setDemoArmed] = useState(false);
@@ -93,22 +94,40 @@ export function AdminNavbar({
   const DEMO_FINGERPRINT =
     "plate_number.ilike.DEMO%,origin.ilike.%demo%,institution.ilike.%demo%";
 
+  // Detect demo trips from the DB so the button reflects reality:
+  //   1. is_demo flag (migration 20260802000003 applied) — authoritative.
+  //   2. if the flag column doesn't exist yet (migration not applied), the
+  //      combined query errors and we fall back to the fingerprint match.
   const checkDemoTrips = useCallback(async () => {
-    const { data } = await supabase
-      .from("trips")
-      .select("id")
-      .or(DEMO_FINGERPRINT);
-    const count = data?.length ?? 0;
+    const demoFilter = `is_demo.eq.true,${DEMO_FINGERPRINT}`;
+    const { data } = await supabase.from("trips").select("id").or(demoFilter);
+    if (data == null) {
+      // Column missing → retry with the fingerprint only
+      const { data: fallback } = await supabase
+        .from("trips")
+        .select("id")
+        .or(DEMO_FINGERPRINT);
+      const count = fallback?.length ?? 0;
+      setDemoCount(count);
+      setDemoActive(count > 0);
+      return;
+    }
+    const count = data.length;
     setDemoCount(count);
     setDemoActive(count > 0);
   }, [supabase]);
 
+  // Re-check whenever the trip list changes (realtime, generation, deletion)
+  // so the button toggles to "Stop Demo" the moment fake trips appear.
   useEffect(() => {
     void checkDemoTrips();
+  }, [checkDemoTrips, trips]);
+
+  useEffect(() => {
     return () => {
       if (demoTimer.current) clearTimeout(demoTimer.current);
     };
-  }, [checkDemoTrips]);
+  }, []);
 
   // Manual "Dead Man Switch" scan — the util needs its dependencies and a
   // toast notifier (previously it was called bare, crashing on enableAudio,
@@ -161,14 +180,16 @@ export function AdminNavbar({
       toast("Error generating demo data.", "error");
     } else {
       toast("Demo traffic generated — check the map.", "success");
-      setDemoActive(true);
-      setDemoCount((c) => c + 5);
-      // Best-effort flag so Stop Demo can remove exactly these (the delete
-      // RPC also matches by fingerprint, so this is purely for the flag).
+      // Flag the freshly created trips so Stop Demo can remove exactly
+      // these. Match on the demo fingerprint AND a recent created_at window
+      // (belt-and-braces: even if the generator's rows don't match the
+      // fingerprint, the ones just created are still marked is_demo).
+      const since = new Date(Date.now() - 60_000).toISOString();
       await supabase
         .from("trips")
         .update({ is_demo: true })
-        .or(DEMO_FINGERPRINT);
+        .or(DEMO_FINGERPRINT)
+        .gte("created_at", since);
       // Trigger refetch
       const { data } = await supabase
         .from("trips")
@@ -176,6 +197,9 @@ export function AdminNavbar({
         .neq("status", "completed")
         .neq("status", "resolved");
       if (data) setTrips(data);
+      // Re-sync the button state from the DB (the trips-prop effect also
+      // does this, but do it here so the label flips immediately).
+      await checkDemoTrips();
     }
     setLoading(false);
   };
@@ -191,12 +215,14 @@ export function AdminNavbar({
     if (error || data == null) {
       console.warn("delete_demo_traffic RPC unavailable:", error);
       try {
-        const { data: demo, error: fetchError } = await supabase
+        // is_demo-aware, same fallback chain as checkDemoTrips
+        const demoFilter = `is_demo.eq.true,${DEMO_FINGERPRINT}`;
+        const { data: demo } = await supabase
           .from("trips")
           .select("id")
-          .or(DEMO_FINGERPRINT);
-        if (fetchError) throw fetchError;
-        const ids = (demo || []).map((t) => t.id);
+          .or(demoFilter);
+        const demoRows = demo ?? (await supabase.from("trips").select("id").or(DEMO_FINGERPRINT)).data;
+        const ids = (demoRows || []).map((t) => t.id);
         for (const id of ids) {
           await supabase.from("trip_logs").delete().eq("trip_id", id);
           await supabase.from("alert_logs").delete().eq("trip_id", id);

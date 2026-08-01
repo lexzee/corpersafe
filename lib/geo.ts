@@ -1,11 +1,13 @@
 // ---------------------------------------------------------------------------
 // CorperSafe — lightweight geography helpers (no paid services).
 //
-// Trips store destinations as text (state + camp name), not coordinates.
-// To draw planned routes and measure distance we resolve a point per trip:
-//   * precise path  — one-time Nominatim (OpenStreetMap) geocode of the camp
-//                     name, cached per camp (used on the traveler + parent
-//                     views where a single trip is shown and accuracy counts)
+// Trips store destinations as text (state + camp name). The camp name comes
+// from the allowed_states.campName column at registration. To draw planned
+// routes and measure distance we resolve a point per trip:
+//   * precise path  — one-time Nominatim (OpenStreetMap) geocode of the CAMP
+//                     name (allowed_states.campName), cached per camp; used
+//                     on the traveler + parent views and stored on the trip
+//                     (destination_lat/lng) at registration for everyone
 //   * fallback      — a built-in centroid per Nigerian state (36 + FCT), so
 //                     the maps still work fully offline / when geocoding is
 //                     rate-limited or blocked (used everywhere)
@@ -135,25 +137,25 @@ export function getDestinationPoint(trip: TripGeo | null | undefined): [number, 
 const campGeocodeCache = new Map<string, [number, number] | null>();
 
 /**
- * Best-effort precise destination coordinates: Nominatim lookup of the camp
- * name (1 request, cached, OSM usage policy ~1 req/s — fine for a per-trip
- * lookup), falling back to the state centroid when offline/blocked/unknown.
+ * Precise coordinates for a named camp via Nominatim (free OSM). Uses the
+ * camp name (allowed_states.campName), NOT the bare state name, so the
+ * marker sits on the actual camp. Returns null when offline/blocked/no hit
+ * — callers decide their fallback.
  */
-export async function geocodeDestination(
-  trip: TripGeo | null | undefined,
+export async function geocodeCamp(
+  camp: string | null | undefined,
+  state: string | null | undefined,
 ): Promise<[number, number] | null> {
-  const fallback = getDestinationPoint(trip);
-  const camp = trip?.destination_camp?.trim();
-  const state = trip?.destination_state?.trim();
-  if (!camp) return fallback;
+  const campName = camp?.trim();
+  if (!campName) return null;
 
-  const key = `camp|${state}|${camp}`;
-  if (campGeocodeCache.has(key)) return campGeocodeCache.get(key) ?? fallback;
+  const key = `camp|${state?.trim() || ""}|${campName}`;
+  if (campGeocodeCache.has(key)) return campGeocodeCache.get(key) ?? null;
 
   try {
     const res = await fetch(
       `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=ng&q=${encodeURIComponent(
-        `${camp}, ${state}, Nigeria`,
+        `${campName}, ${state?.trim() || ""}, Nigeria`,
       )}`,
       { headers: { Accept: "application/json" } },
     );
@@ -161,17 +163,46 @@ export async function geocodeDestination(
       const data = await res.json();
       const hit = Array.isArray(data) && data[0] ? data[0] : null;
       if (hit?.lat != null && hit?.lon != null) {
-        const point: [number, number] = [
-          Number(hit.lat),
-          Number(hit.lon),
-        ];
+        const point: [number, number] = [Number(hit.lat), Number(hit.lon)];
         campGeocodeCache.set(key, point);
         return point;
       }
     }
   } catch {
-    // Offline / blocked — fall back to the state centroid below
+    // Offline / blocked — return null; caller falls back to the centroid
   }
   campGeocodeCache.set(key, null);
-  return fallback;
+  return null;
+}
+
+/**
+ * Best-effort precise destination coordinates for a trip: geocodes the CAMP
+ * name (allowed_states.campName) via Nominatim, looking the camp name up
+ * from allowed_states when the trip row only stored the state (older trips).
+ * Falls back to the stored destination_lat/lng or the state centroid.
+ */
+export async function geocodeDestination(
+  trip: TripGeo | null | undefined,
+): Promise<[number, number] | null> {
+  const fallback = getDestinationPoint(trip);
+  let camp = trip?.destination_camp?.trim();
+  const state = trip?.destination_state?.trim();
+
+  // Older trips may lack destination_camp — recover the camp name from
+  // allowed_states so we still pin the camp, not just the state.
+  if (!camp && state) {
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const { data } = await createClient()
+        .from("allowed_states")
+        .select("campName")
+        .eq("state", state)
+        .maybeSingle();
+      camp = (data?.campName as string | undefined)?.trim();
+    } catch {
+      // DB lookup unavailable — fall through to the centroid fallback
+    }
+  }
+
+  return (await geocodeCamp(camp, state)) ?? fallback;
 }

@@ -142,6 +142,7 @@ function MonitorView({
             setTrips={setTrips}
             profile={profile}
             user={user}
+            trips={trips}
           />
         </div>
       </header>
