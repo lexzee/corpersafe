@@ -42,7 +42,26 @@ supabase db push
 
 ## Follow-ups worth version-controlling next
 
+- [x] `handle_new_user()` trigger + recursion-safe policy helpers
+      (`20260802000000_fix_proposals_rls_and_profiles.sql`) — **required if
+      you see `23503` (FK on trips) or `42P17` (policy recursion) errors**
 - `check_signal_loss()` and `generate_demo_traffic()` function bodies
 - Base table DDL + owner/admin RLS policies (dump from the live project)
 - A `trip_tracking_public` view (minimal public columns) + longer codes to
   replace table-level anonymous SELECT
+
+## If trip creation fails with `42P17` / `23503`
+
+1. Run `migrations/20260802000000_fix_proposals_rls_and_profiles.sql` (SQL
+   Editor or `supabase db push`). It recreates the profile trigger and
+   backfills missing rows.
+2. Inspect your remaining policies and rewrite any that self-reference
+   `profiles` using `public.is_admin()` (see the templates inside the
+   migration):
+
+   ```sql
+   select tablename, policyname, cmd, qual, with_check
+   from pg_policies
+   where schemaname = 'public' and tablename in ('profiles', 'trips');
+   ```
+

@@ -171,14 +171,41 @@ export function RegisterTripForm({
     const userId = user.id;
 
     try {
-      const { error: profileError } = await supabase
+      // Save next-of-kin onto the profile. If the profile row doesn't
+      // exist yet (e.g. no handle_new_user trigger in this project), the
+      // trips insert below would fail its pcm_id foreign key (409), so
+      // create the row from the auth metadata as a fallback. The insert is
+      // ignore-duplicates: if the row exists but the UPDATE was blocked by
+      // a broken RLS policy, we don't fight it — the SQL migration fixes
+      // the policies properly.
+      const { data: updatedProfile, error: profileError } = await supabase
         .from("profiles")
         .update({
           next_of_kin: nextOfKin,
           next_of_kin_email: nextOfKinEmail,
         })
-        .eq("id", userId);
-      if (profileError) console.warn("Profile Update error:", profileError);
+        .eq("id", userId)
+        .select("id");
+
+      if (profileError) {
+        console.warn("Profile update error:", profileError);
+      }
+
+      if (profileError || !updatedProfile || updatedProfile.length === 0) {
+        const { error: insertError } = await supabase.from("profiles").upsert(
+          {
+            id: userId,
+            full_name: user.user_metadata?.full_name || "",
+            phone: user.user_metadata?.phone || "",
+            role: "pcm",
+            next_of_kin: nextOfKin,
+            next_of_kin_email: nextOfKinEmail,
+          },
+          { onConflict: "id", ignoreDuplicates: true },
+        );
+        if (insertError)
+          console.warn("Profile fallback insert error:", insertError);
+      }
 
       const trackingCode = "NYSC-" + Math.floor(10000 + Math.random() * 90000);
 
