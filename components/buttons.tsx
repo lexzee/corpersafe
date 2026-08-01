@@ -5,6 +5,7 @@ import {
   CheckCircle,
   Clipboard,
   Clock,
+  Loader2,
   Navigation,
   PlayCircle,
   RefreshCw,
@@ -14,6 +15,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 export function CopyButton({ code }: { code: string }) {
   return (
@@ -73,14 +75,129 @@ export function PauseResumeButton({
   );
 }
 
+/**
+ * Completing a trip is irreversible from the traveler's side, so this is a
+ * two-stage flow: a confirmation sheet, then a short undo window. Nothing
+ * is written to the database until the undo window expires, so watchers
+ * never see a false "completed" flip.
+ */
 export function ArrivedButton({ trip, currentLoc, setTrip }: any) {
+  const UNDO_SECONDS = 8;
+  const [confirming, setConfirming] = useState(false);
+  const [undoLeft, setUndoLeft] = useState<number | null>(null);
+  const [finishing, setFinishing] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const clearTimer = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
+  };
+
+  useEffect(() => clearTimer, []);
+
+  const startUndoWindow = () => {
+    setConfirming(false);
+    setUndoLeft(UNDO_SECONDS);
+    timerRef.current = setInterval(() => {
+      setUndoLeft((s) => {
+        if (s === null || s <= 1) {
+          clearTimer();
+          void finalize();
+          return null;
+        }
+        return s - 1;
+      });
+    }, 1000);
+  };
+
+  const finalize = async () => {
+    clearTimer();
+    setUndoLeft(null);
+    setFinishing(true);
+    // navigateOnComplete: false — the parent dashboard reacts to the
+    // completed status and swaps views itself.
+    await updateStatus("completed", null, trip, setTrip, currentLoc, {
+      navigateOnComplete: false,
+    });
+    setFinishing(false);
+  };
+
+  const undo = () => {
+    clearTimer();
+    setUndoLeft(null);
+  };
+
   return (
-    <button
-      onClick={() => updateStatus("completed", null, trip, setTrip, currentLoc)}
-      className="bg-primary border-2 border-primary text-primary-foreground p-4 rounded-xl flex flex-col items-center justify-center gap-2 font-bold hover:bg-primary/90 transition shadow-md shadow-primary/20 active:scale-95"
-    >
-      <CheckCircle size={24} /> Arrived
-    </button>
+    <>
+      <button
+        onClick={() => setConfirming(true)}
+        disabled={finishing}
+        className="bg-primary border-2 border-primary text-primary-foreground p-4 rounded-xl flex flex-col items-center justify-center gap-2 font-bold hover:bg-primary/90 transition shadow-md shadow-primary/20 active:scale-95 disabled:opacity-70"
+      >
+        {finishing ? (
+          <Loader2 size={24} className="animate-spin" />
+        ) : (
+          <CheckCircle size={24} />
+        )}
+        Arrived
+      </button>
+
+      {/* Stage 1: explicit confirmation */}
+      {confirming && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="arrive-title"
+            className="bg-card w-full max-w-sm rounded-2xl p-6 animate-in slide-in-from-bottom-10 duration-300 border border-border shadow-2xl"
+          >
+            <h3 id="arrive-title" className="text-lg font-bold text-card-foreground">
+              Mark trip as completed?
+            </h3>
+            <p className="text-sm text-muted-foreground mt-1 mb-5">
+              Only do this once you&apos;ve arrived at camp. It ends live
+              tracking for everyone watching your journey.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirming(false)}
+                className="flex-1 py-3 rounded-xl font-bold bg-muted hover:bg-muted/70 transition"
+              >
+                Not yet
+              </button>
+              <button
+                onClick={startUndoWindow}
+                className="flex-1 py-3 rounded-xl font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition active:scale-95"
+              >
+                Yes, arrived
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stage 2: undo window (DB is not written until this expires) */}
+      {undoLeft !== null && (
+        <div className="fixed bottom-6 inset-x-4 sm:left-1/2 sm:-translate-x-1/2 sm:max-w-sm z-50 bg-card border border-border shadow-2xl rounded-xl p-4 flex items-center gap-3 animate-in slide-in-from-bottom-4">
+          <CheckCircle className="text-success shrink-0" size={20} />
+          <p className="text-sm font-medium flex-1">
+            Ending trip in {undoLeft}s…
+          </p>
+          <button
+            onClick={() => void finalize()}
+            className="text-xs font-bold text-muted-foreground underline"
+          >
+            End now
+          </button>
+          <button
+            onClick={undo}
+            className="shrink-0 bg-primary text-primary-foreground text-xs font-bold px-3 py-2 rounded-lg active:scale-95 transition"
+          >
+            Undo
+          </button>
+        </div>
+      )}
+    </>
   );
 }
 

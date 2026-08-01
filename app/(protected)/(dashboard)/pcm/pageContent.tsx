@@ -23,7 +23,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getDistanceFromLatLonInKm, updateStatus } from "@/lib/utils";
 import { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   History,
   User as UserIcon,
@@ -31,12 +31,80 @@ import {
   Plus,
   ChevronRight,
   ArrowLeft,
+  WifiOff,
+  BatteryWarning,
+  Smartphone,
+  CheckCircle,
+  AlertTriangle,
+  Info,
+  X,
 } from "lucide-react";
 
 const UserMapView = dynamic(
   () => import("@/components/map-views").then((mod) => mod.UserMapView),
   { ssr: false },
 );
+
+// Lightweight inline toast — states that matter to the traveler (auto-pause,
+// offline, etc.) surface here instead of failing silently.
+function ToastBar({
+  toast,
+  onDismiss,
+}: {
+  toast: any;
+  onDismiss: () => void;
+}) {
+  useEffect(() => {
+    const t = setTimeout(onDismiss, 6500);
+    return () => clearTimeout(t);
+  }, [toast, onDismiss]);
+
+  if (!toast) return null;
+
+  const Icon =
+    toast.kind === "success"
+      ? CheckCircle
+      : toast.kind === "warning"
+        ? AlertTriangle
+        : Info;
+  const tone =
+    toast.kind === "success"
+      ? "text-success"
+      : toast.kind === "warning"
+        ? "text-warning"
+        : "text-primary";
+
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed top-4 inset-x-4 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:max-w-sm sm:w-full z-[60] animate-in slide-in-from-top-4"
+    >
+      <div className="bg-card border border-border shadow-2xl rounded-xl p-3 flex items-start gap-3">
+        <Icon size={18} className={`${tone} shrink-0 mt-0.5`} />
+        <p className="text-sm font-medium flex-1">{toast.message}</p>
+        {toast.actionLabel && (
+          <button
+            onClick={() => {
+              toast.onAction?.();
+              onDismiss();
+            }}
+            className="shrink-0 text-xs font-bold text-primary underline underline-offset-2"
+          >
+            {toast.actionLabel}
+          </button>
+        )}
+        <button
+          onClick={onDismiss}
+          aria-label="Dismiss notification"
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+        >
+          <X size={16} />
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function TrackingView({
   trip,
@@ -59,6 +127,27 @@ function TrackingView({
     9.082, 8.6753,
   ]);
   const [hasFix, setHasFix] = useState(false);
+  const [plateNumber, setPlateNumber] = useState<string>(
+    trip?.plate_number || "",
+  );
+  const [screenAwake, setScreenAwake] = useState(false);
+  const [isOnline, setIsOnline] = useState(true);
+  const [syncIssue, setSyncIssue] = useState(false);
+  const [lowBattery, setLowBattery] = useState(false);
+  const [toast, setToast] = useState<any>(null);
+  const wakeLockRef = useRef<any>(null);
+  const syncFailCountRef = useRef(0);
+
+  const dismissToast = useCallback(() => setToast(null), []);
+  const showToast = useCallback(
+    (
+      message: string,
+      kind: "info" | "success" | "warning" = "info",
+      actionLabel?: string,
+      onAction?: () => void,
+    ) => setToast({ id: Date.now(), message, kind, actionLabel, onAction }),
+    [],
+  );
 
   // Refs for Auto-Stop Logic
   const lastPosRef = useRef<{ lat: number; lng: number; time: number } | null>(
@@ -77,6 +166,96 @@ function TrackingView({
       setHasFix(true);
     }
   }, []);
+
+  // Keep the screen awake while tracking — this browser tab IS the tracking
+  // device, so the phone sleeping mid-journey silently stops updates.
+  const isCompleted = trip?.status === "completed";
+  useEffect(() => {
+    if (isCompleted) return;
+
+    let active = true;
+
+    const requestWakeLock = async () => {
+      try {
+        if (!("wakeLock" in navigator)) return;
+        const sentinel = await (navigator as any).wakeLock.request("screen");
+        if (!active) {
+          sentinel.release().catch(() => {});
+          return;
+        }
+        wakeLockRef.current = sentinel;
+        setScreenAwake(true);
+        sentinel.addEventListener("release", () => {
+          wakeLockRef.current = null;
+          setScreenAwake(false);
+        });
+      } catch {
+        // Requires a visible tab (and a user gesture on some browsers)
+        setScreenAwake(false);
+      }
+    };
+
+    void requestWakeLock();
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && !wakeLockRef.current) {
+        void requestWakeLock();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVisible);
+      wakeLockRef.current?.release?.().catch(() => {});
+      wakeLockRef.current = null;
+      setScreenAwake(false);
+    };
+  }, [isCompleted]);
+
+  // Connectivity + battery health. Offline must never look like danger —
+  // the traveler gets a persistent banner and GPS keeps recording.
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+
+    const handleOnline = () => {
+      setIsOnline(true);
+      setSyncIssue(false);
+      syncFailCountRef.current = 0;
+      showToast("Back online — live updates resumed.", "success");
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      showToast(
+        "Connection lost — GPS keeps recording on this device.",
+        "warning",
+      );
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    let battery: any = null;
+    const checkBattery = () => {
+      if (battery) setLowBattery(!battery.charging && battery.level <= 0.2);
+    };
+    (navigator as any)
+      .getBattery?.()
+      .then((b: any) => {
+        battery = b;
+        checkBattery();
+        b.addEventListener("levelchange", checkBattery);
+        b.addEventListener("chargingchange", checkBattery);
+      })
+      .catch(() => {});
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      if (battery) {
+        battery.removeEventListener("levelchange", checkBattery);
+        battery.removeEventListener("chargingchange", checkBattery);
+      }
+    };
+  }, [showToast]);
 
   //   Real-time GPS Tracking
   useEffect(() => {
@@ -149,6 +328,18 @@ function TrackingView({
             );
             stopTimerRef.current = null; // Reset timer
             isAutoPausedRef.current = true;
+            showToast(
+              "Long stop detected — trip auto-paused (e.g. traffic).",
+              "warning",
+              "Resume now",
+              () => {
+                isAutoPausedRef.current = false;
+                void updateStatus("active", null, trip, setTrip, [
+                  latitude,
+                  longitude,
+                ]);
+              },
+            );
           }
         }
         // 2. DETECT MOVEMENT (Auto-Resume)
@@ -158,6 +349,7 @@ function TrackingView({
             console.log("Auto-Resume Triggered");
             await updateStatus("active", null, trip, setTrip, currentLoc);
             isAutoPausedRef.current = false;
+            showToast("Movement detected — tracking resumed.", "success");
           }
           stopTimerRef.current = null;
         }
@@ -167,8 +359,9 @@ function TrackingView({
         }
 
         // C. REAL-TIME LOGGING TO SUPABASE
-        // Push to Supabase
-        await supabase
+        // Push to Supabase — treat repeated failures as a sync issue so the
+        // UI can warn the traveler instead of silently going stale.
+        const { error: positionError } = await supabase
           .from("trips")
           .update({
             current_lat: latitude,
@@ -177,6 +370,15 @@ function TrackingView({
             last_updated: new Date().toISOString(),
           })
           .eq("id", trip.id);
+
+        if (positionError) {
+          console.error("Position sync failed:", positionError);
+          syncFailCountRef.current += 1;
+          if (syncFailCountRef.current >= 3) setSyncIssue(true);
+        } else {
+          if (syncFailCountRef.current >= 3) setSyncIssue(false);
+          syncFailCountRef.current = 0;
+        }
 
         // D. HISTORICAL LOGGING
         if (now - lastLogTimeRef.current > 60000 * 1) {
@@ -210,11 +412,16 @@ function TrackingView({
       navigator.geolocation.getCurrentPosition(
         async (pos) => {
           const { latitude, longitude } = pos.coords;
+          // Plate number is collected at boarding time (see TripPending)
+          const plate = (plateNumber || trip.plate_number || "")
+            .trim()
+            .toUpperCase();
 
           const { error } = await supabase
             .from("trips")
             .update({
               status: "active",
+              plate_number: plate,
               current_lat: latitude,
               current_lng: longitude,
               last_updated: new Date().toISOString(),
@@ -231,6 +438,7 @@ function TrackingView({
           setTrip((prev: any) => ({
             ...prev,
             status: "active",
+            plate_number: plate,
             current_lat: latitude,
             current_lng: longitude,
           }));
@@ -271,6 +479,8 @@ function TrackingView({
         trip={trip}
         handleStartTrip={handleStartTrip}
         starting={starting}
+        plateNumber={plateNumber}
+        setPlateNumber={setPlateNumber}
       />
     );
   }
@@ -285,8 +495,54 @@ function TrackingView({
 
       <UserNavbar status={trip.status} currentLoc={currentLoc} hasFix={hasFix} />
 
+      {/* Screen-on reminder + connectivity/battery health */}
+      <div className="max-w-md mx-auto px-4 pt-3 space-y-2">
+        <div className="flex items-center gap-2 text-[11px] font-medium rounded-lg border border-border bg-muted/40 text-muted-foreground px-3 py-2">
+          {screenAwake ? (
+            <>
+              <CheckCircle size={14} className="text-success shrink-0" />
+              Screen will stay awake during this trip
+            </>
+          ) : (
+            <>
+              <Smartphone size={14} className="shrink-0" />
+              Keep this screen on and the tab open — it&apos;s the tracking
+              device
+            </>
+          )}
+        </div>
+        {(!isOnline || syncIssue) && (
+          <div className="flex items-center gap-2 text-xs font-bold rounded-lg border border-warning/40 bg-warning/10 text-warning px-3 py-2 animate-in slide-in-from-top">
+            <WifiOff size={14} className="shrink-0" />
+            No connection — GPS keeps recording; updates resume when
+            you&apos;re back online.
+          </div>
+        )}
+        {lowBattery && (
+          <div className="flex items-center gap-2 text-xs font-bold rounded-lg border border-warning/40 bg-warning/10 text-warning px-3 py-2 animate-in slide-in-from-top">
+            <BatteryWarning size={14} className="shrink-0" />
+            Battery low — plug in; tracking may stop if the phone dies.
+          </div>
+        )}
+      </div>
+
       <div className="max-w-md mx-auto p-4 space-y-4">
         <TripStatus trip={trip} setShowPauseModal={setShowPauseModal} />
+
+        {/* Live broadcast chip */}
+        <div className="flex items-center justify-center gap-2 text-xs font-bold text-muted-foreground">
+          {hasFix && isOnline && (
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-success opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-success"></span>
+            </span>
+          )}
+          {hasFix
+            ? isOnline
+              ? "Live — your family can watch your journey"
+              : "Recording locally (offline)"
+            : "Acquiring GPS…"}
+        </div>
 
         {/* Speed Card */}
         <div className="grid grid-cols-3 gap-3">
@@ -363,7 +619,10 @@ function TrackingView({
         </div>
       </div>
 
-      <PanicButton tripId={trip.id} />
+      <PanicButton trip={trip} setTrip={setTrip} />
+
+      {/* Transient notifications (auto-pause, offline, …) */}
+      {toast && <ToastBar toast={toast} onDismiss={dismissToast} />}
 
       {/* Pause Modal */}
       {showPauseModal && (
@@ -418,6 +677,14 @@ export function PCMContent({
     init();
   }, []);
 
+  // When the active trip completes (traveler tapped "Arrived" inside the
+  // tracking view), return to the dashboard — it shows an arrival card.
+  useEffect(() => {
+    if (trip?.status === "completed" && view === "tracking") {
+      setView("dashboard");
+    }
+  }, [trip?.status, view]);
+
   if (loading) {
     return (
       <div className="flex h-screen items-center justify-center bg-background flex-col gap-4">
@@ -463,12 +730,42 @@ export function PCMContent({
             {trip
               ? trip.status === "active"
                 ? "Trip in progress"
-                : "Trip paused"
+                : trip.status === "completed"
+                  ? "Completed — you arrived safely"
+                  : "Trip paused"
               : "No active trip"}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {trip ? (
+          {trip && trip.status === "completed" ? (
+            <div className="space-y-4">
+              <div className="flex items-start gap-3 bg-success/10 border border-success/30 rounded-lg p-3">
+                <CheckCircle className="text-success shrink-0 mt-0.5" size={20} />
+                <div className="text-sm">
+                  <p className="font-bold">Arrival recorded</p>
+                  <p className="text-muted-foreground">
+                    Your trip to {trip.destination_state} has been safely
+                    logged in your history.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  variant="secondary"
+                  className="flex-1"
+                  onClick={() => router.push("/history")}
+                >
+                  <History className="mr-2 h-4 w-4" /> View History
+                </Button>
+                <Button
+                  className="flex-1"
+                  onClick={() => router.replace("/register-trip")}
+                >
+                  <Plus className="mr-2 h-4 w-4" /> New Trip
+                </Button>
+              </div>
+            </div>
+          ) : trip ? (
             <div className="space-y-4">
               <div className="flex justify-between items-center bg-muted/50 p-3 rounded-lg">
                 <div className="text-sm">

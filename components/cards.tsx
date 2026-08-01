@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { CopyButton, ShareButton, ViewHistoryButton } from "./buttons";
+import { Input } from "./ui/input";
 
 export const TripStatus = ({
   trip,
@@ -64,10 +65,14 @@ export const TripPending = ({
   trip,
   handleStartTrip,
   starting,
+  plateNumber,
+  setPlateNumber,
 }: {
   trip: any;
   handleStartTrip: () => void;
   starting: boolean;
+  plateNumber: string;
+  setPlateNumber: (value: string) => void;
 }) => {
   return (
     <div className="min-h-screen bg-muted/30 flex flex-col items-center justify-center p-6 text-center">
@@ -91,7 +96,7 @@ export const TripPending = ({
               Vehicle
             </span>
             <span className="font-mono font-bold text-foreground">
-              {trip.plate_number}
+              {plateNumber || trip.plate_number || "Not provided"}
             </span>
           </div>
           <div className="flex justify-between">
@@ -102,6 +107,30 @@ export const TripPending = ({
               {trip.tracking_code}
             </span>
           </div>
+        </div>
+
+        {/* Plate number — collected at boarding time, when the traveler
+            actually knows the vehicle they're in. No registry verification. */}
+        <div className="text-left mb-6">
+          <label
+            htmlFor="plateNumber"
+            className="text-xs font-bold text-muted-foreground uppercase"
+          >
+            Vehicle plate number{" "}
+            <span className="normal-case font-medium">(add when you board)</span>
+          </label>
+          <Input
+            id="plateNumber"
+            value={plateNumber}
+            onChange={(e) => setPlateNumber(e.target.value.toUpperCase())}
+            placeholder="e.g. ABC-123-XY"
+            maxLength={15}
+            className="mt-1 font-mono uppercase"
+          />
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Included in SOS alerts and on your admin watch-card. You can start
+            without it, but it helps responders find your vehicle.
+          </p>
         </div>
 
         <button

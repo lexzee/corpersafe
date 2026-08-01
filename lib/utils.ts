@@ -98,6 +98,7 @@ export const updateStatus = async (
   trip: any,
   setTrip: (value: React.SetStateAction<any>) => void,
   Location: [number, number],
+  options?: { navigateOnComplete?: boolean },
 ) => {
   const supabase = createClient();
   if (!trip) return;
@@ -123,9 +124,9 @@ export const updateStatus = async (
     status_at_time: trip.status,
   });
 
-  // Avoid calling React hooks from helpers. Use history API so client-side
-  // router can respond; fall back to full navigation if necessary.
-  if (status === "completed") {
+  // Navigation is opt-out: the "Arrived" undo flow defers to the parent
+  // dashboard, which reacts to the completed status itself.
+  if (status === "completed" && options?.navigateOnComplete !== false) {
     try {
       if (typeof window !== "undefined") {
         window.location.href = "/pcm";
