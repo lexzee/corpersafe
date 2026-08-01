@@ -1,109 +1,116 @@
-<a href="https://demo-nextjs-with-supabase.vercel.app/">
-  <img alt="Next.js and Supabase Starter Kit - the fastest way to build apps with Next.js and Supabase" src="https://demo-nextjs-with-supabase.vercel.app/opengraph-image.png">
-  <h1 align="center">Next.js and Supabase Starter Kit</h1>
-</a>
+# 🛡️ CorperSafe
 
-<p align="center">
- The fastest way to build apps with Next.js and Supabase
-</p>
+**Travel to camp, arrive safely.** CorperSafe is a travel-safety companion for Nigerian **NYSC corps members (PCMs)** travelling to orientation camps. A traveler registers their trip, shares a tracking link with family, is GPS-tracked live from their own phone, and can raise an SOS in emergencies — while state coordinators, school admins, and security personnel monitor every journey from a Mission Control dashboard.
 
-<p align="center">
-  <a href="#features"><strong>Features</strong></a> ·
-  <a href="#demo"><strong>Demo</strong></a> ·
-  <a href="#deploy-to-vercel"><strong>Deploy to Vercel</strong></a> ·
-  <a href="#clone-and-run-locally"><strong>Clone and run locally</strong></a> ·
-  <a href="#feedback-and-issues"><strong>Feedback and issues</strong></a>
-  <a href="#more-supabase-examples"><strong>More Examples</strong></a>
-</p>
-<br/>
+> ⚠️ **Disclaimer:** CorperSafe is independently developed and is **not affiliated with the NYSC Directorate**.
 
-## Features
+---
 
-- Works across the entire [Next.js](https://nextjs.org) stack
-  - App Router
-  - Pages Router
-  - Proxy
-  - Client
-  - Server
-  - It just works!
-- supabase-ssr. A package to configure Supabase Auth to use cookies
-- Password-based authentication block installed via the [Supabase UI Library](https://supabase.com/ui/docs/nextjs/password-based-auth)
-- Styling with [Tailwind CSS](https://tailwindcss.com)
-- Components with [shadcn/ui](https://ui.shadcn.com/)
-- Optional deployment with [Supabase Vercel Integration and Vercel deploy](#deploy-your-own)
-  - Environment variables automatically assigned to Vercel project
+## How it works
 
-## Demo
+```
+PCM registers trip ──► shares NYSC-XXXXX code with family ──► START JOURNEY
+        │                                                        │
+        ▼                                                        ▼
+Admins see trip on Mission Control ◄── live GPS (watchPosition) ── phone
+        │                                                        │
+   SOS button ──► status=danger ──► email to next-of-kin + alarm on admin map
+```
 
-You can view a fully working demo at [demo-nextjs-with-supabase.vercel.app](https://demo-nextjs-with-supabase.vercel.app/).
+### Roles
 
-## Deploy to Vercel
+| Role | Access | Key screens |
+|---|---|---|
+| **PCM** (traveler) | Sign up (default role) | Register trip, live tracking view, SOS, trip history, profile |
+| **Parent / Guardian** | **No account needed** | `/track?code=...` live map with plain-language status |
+| **Admin** (`state_admin`, `school_admin`, `admin`, `super_admin`) | Set `profiles.role` in DB | Dashboard + Mission Control: live map of all trips, SOS alarm, acknowledge/resolve incidents, dead-man's-switch signal scan |
 
-Vercel deployment will guide you through creating a Supabase account and project.
+## Feature highlights
 
-After installation of the Supabase integration, all relevant environment variables will be assigned to the project so the deployment is fully functioning.
+- **Trip registration** with GPS-detected origin (OSM Nominatim reverse geocode), DB-backed camp/institution pickers, and next-of-kin contacts.
+- **Live tracking** via `watchPosition` with speed calculation, auto-pause after 5 min stopped (< 5 km/h) and auto-resume (> 10 km/h), with one-tap override.
+- **Resilient by design:** screen wake-lock, offline GPS queue in `localStorage` (synced on reconnect), low-battery & connection warnings.
+- **SOS:** hold-3s activation with haptics → 5s undo window → status `danger` + next-of-kin email (EmailJS) + admin alarm. False alarms can be cancelled; admins run a `danger → responding → resolved` incident workflow with an audit trail.
+- **Parents' tracker** (`/track`): no login, realtime updates, stale-signal reassurance copy.
+- **PWA:** installable, branded offline page, network-first service worker.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&project-name=nextjs-with-supabase&repository-name=nextjs-with-supabase&demo-title=nextjs-with-supabase&demo-description=This+starter+configures+Supabase+Auth+to+use+cookies%2C+making+the+user%27s+session+available+throughout+the+entire+Next.js+app+-+Client+Components%2C+Server+Components%2C+Route+Handlers%2C+Server+Actions+and+Middleware.&demo-url=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2F&external-id=https%3A%2F%2Fgithub.com%2Fvercel%2Fnext.js%2Ftree%2Fcanary%2Fexamples%2Fwith-supabase&demo-image=https%3A%2F%2Fdemo-nextjs-with-supabase.vercel.app%2Fopengraph-image.png)
+## Tech stack
 
-The above will also clone the Starter kit to your GitHub, you can clone that locally and develop locally.
+Next.js (App Router) · React 19 · TypeScript · Tailwind + shadcn/ui-style components · Supabase (Auth, Postgres, Realtime, RPC) · Leaflet/react-leaflet (OSM + CARTO tiles) · EmailJS
 
-If you wish to just develop locally and not deploy to Vercel, [follow the steps below](#clone-and-run-locally).
+## Getting started
 
-## Clone and run locally
+### 1. Supabase project
 
-1. You'll first need a Supabase project which can be made [via the Supabase dashboard](https://database.new)
+Create a project at [database.new](https://database.new). You'll need these tables (the app was built against them):
 
-2. Create a Next.js app using the Supabase Starter template npx command
+| Table | Purpose |
+|---|---|
+| `profiles` | `full_name`, `phone`, `role`, `jurisdiction`, `next_of_kin`, `next_of_kin_email` |
+| `trips` | journey rows: `pcm_id`, `origin`, `destination_state/camp`, `institution`, `status`, `tracking_code`, `plate_number`, `current_lat/lng`, `current_speed`, `last_updated` |
+| `trip_logs` | GPS breadcrumb history (route replay) |
+| `alert_logs` | SOS email + admin action audit trail |
+| `allowed_states` / `allowed_institutions` | camp & school pickers |
+| `vehicles` | *(legacy)* plate registry — verification feature currently removed from the app |
 
-   ```bash
-   npx create-next-app --example with-supabase with-supabase-app
-   ```
+Plus the RPC functions `check_signal_loss()` (dead-man's-switch scan) and `generate_demo_traffic(admin_id)` (demo data).
 
-   ```bash
-   yarn create next-app --example with-supabase with-supabase-app
-   ```
+### 2. Anonymous public tracking (required for `/track`)
 
-   ```bash
-   pnpm create next-app --example with-supabase with-supabase-app
-   ```
+Parents track **without accounts**, so the `anon` role needs read access. Apply the migration in [`supabase/migrations/`](supabase/migrations) (SQL Editor or `supabase db push`) — it adds scoped RLS policies and puts `trips` in the realtime publication. See [`supabase/README.md`](supabase/README.md) for details and verification steps.
 
-3. Use `cd` to change into the app's directory
+### 3. Environment variables
 
-   ```bash
-   cd with-supabase-app
-   ```
+Copy `.env.example` → `.env.local`:
 
-4. Rename `.env.example` to `.env.local` and update the following:
+| Variable | Purpose |
+|---|---|
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | publishable/anon key |
+| `NEXT_PUBLIC_EMAILJS_SERVICE_ID` / `_TEMPLATE_ID` / `_PUBLIC_KEY` | EmailJS credentials for SOS emails (all **must** be `NEXT_PUBLIC_` — they run in the browser) |
+| `NEXT_PUBLIC_EMAILJS_REPLY_TO` | *(optional)* reply-to shown in SOS emails |
 
-  ```env
-  NEXT_PUBLIC_SUPABASE_URL=[INSERT SUPABASE PROJECT URL]
-  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=[INSERT SUPABASE PROJECT API PUBLISHABLE OR ANON KEY]
-  ```
-  > [!NOTE]
-  > This example uses `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, which refers to Supabase's new **publishable** key format.
-  > Both legacy **anon** keys and new **publishable** keys can be used with this variable name during the transition period. Supabase's dashboard may show `NEXT_PUBLIC_SUPABASE_ANON_KEY`; its value can be used in this example.
-  > See the [full announcement](https://github.com/orgs/supabase/discussions/29260) for more information.
+### 4. Run
 
-  Both `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` can be found in [your Supabase project's API settings](https://supabase.com/dashboard/project/_?showConnect=true)
+```bash
+npm ci
+npm run dev    # http://localhost:3000
+```
 
-5. You can now run the Next.js local development server:
+### 5. Make someone an admin
 
-   ```bash
-   npm run dev
-   ```
+```sql
+update public.profiles set role = 'state_admin', jurisdiction = 'Lagos'
+where id = '<user-uuid>';
+```
 
-   The starter kit should now be running on [localhost:3000](http://localhost:3000/).
+## Project structure
 
-6. This template comes with the default shadcn/ui style initialized. If you instead want other ui.shadcn styles, delete `components.json` and [re-install shadcn/ui](https://ui.shadcn.com/docs/installation/next)
+```
+app/
+  page.tsx                  Landing
+  track/                    Public parents' tracker (no auth)
+  auth/                     Supabase auth flows
+  (protected)/
+    register-trip/          Trip registration form
+    (dashboard)/pcm/        Traveler dashboard + live tracking view
+    (dashboard)/admin/      Admin dashboard + Mission Control
+    history/                Completed trips + route replay
+    profile/                Profile & next-of-kin editor
+components/                 UI, panic button, map views, sidebar, toaster
+lib/
+  supabase/                 client/server/proxy Supabase helpers
+  utils.ts                  shared helpers (status, distance, safety check)
+  email.ts                  EmailJS SOS sender
+  toast.ts                  global toasts · offline-queue.ts GPS buffer
+public/sw.js + offline.html Service worker & offline page
+app/manifest.ts             PWA manifest
+```
 
-> Check out [the docs for Local Development](https://supabase.com/docs/guides/getting-started/local-development) to also run Supabase locally.
+## Roadmap / known gaps
 
-## Feedback and issues
-
-Please file feedback and issues over on the [Supabase GitHub org](https://github.com/supabase/supabase/issues/new/choose).
-
-## More Supabase examples
-
-- [Next.js Subscription Payments Starter](https://github.com/vercel/nextjs-subscription-payments)
-- [Cookie-based Auth and the Next.js 13 App Router (free course)](https://youtube.com/playlist?list=PL5S4mPUpp4OtMhpnp93EFSo42iQ40XjbF)
-- [Supabase Auth and the Next.js App Router](https://github.com/supabase/supabase/tree/master/examples/auth/nextjs)
+- SMS/WhatsApp alerts to next-of-kin (email-only today — Termii/Twilio planned)
+- TTL job to auto-close abandoned "active" trips
+- Longer, less enumerable tracking codes (+ view/RPC-based public lookup to replace table-level anon SELECT)
+- `npm run lint` has pre-existing style debt (mostly `no-explicit-any`)
+- Base DB schema predates migrations — only new SQL is versioned in `supabase/migrations`

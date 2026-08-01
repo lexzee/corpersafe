@@ -39,6 +39,12 @@ import { InputGroupAddon } from "./ui/input-group";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 
+// allowed_states rows: the camp's host state + its display name
+type StateOption = { state: string; campName: string };
+// Base UI needs to know how to render the selected object into the input —
+// without itemToStringLabel it stringifies the object ("[object Object]")
+const stateToInputText = (item: StateOption) => item.state;
+
 export function RegisterTripForm({
   className,
   ...props
@@ -62,9 +68,7 @@ export function RegisterTripForm({
     lng: number;
   } | null>(null);
 
-  const [stateList, setStateList] = useState<
-    { state: string; campName: string }[]
-  >([]);
+  const [stateList, setStateList] = useState<StateOption[]>([]);
   const [schoolList, setSchoolList] = useState<
     { category: string; items: string[] }[]
   >([]);
@@ -171,19 +175,48 @@ export function RegisterTripForm({
     const userId = user.id;
 
     try {
-      const { error: profileError } = await supabase
+      // Save next-of-kin onto the profile. If the profile row doesn't
+      // exist yet (e.g. no handle_new_user trigger in this project), the
+      // trips insert below would fail its pcm_id foreign key (409), so
+      // create the row from the auth metadata as a fallback. The insert is
+      // ignore-duplicates: if the row exists but the UPDATE was blocked by
+      // a broken RLS policy, we don't fight it — the SQL migration fixes
+      // the policies properly.
+      const { data: updatedProfile, error: profileError } = await supabase
         .from("profiles")
         .update({
           next_of_kin: nextOfKin,
           next_of_kin_email: nextOfKinEmail,
         })
-        .eq("id", userId);
-      if (profileError) console.warn("Profile Update error:", profileError);
+        .eq("id", userId)
+        .select("id");
+
+      if (profileError) {
+        console.warn("Profile update error:", profileError);
+      }
+
+      if (profileError || !updatedProfile || updatedProfile.length === 0) {
+        const { error: insertError } = await supabase.from("profiles").upsert(
+          {
+            id: userId,
+            full_name: user.user_metadata?.full_name || "",
+            phone: user.user_metadata?.phone || "",
+            role: "pcm",
+            next_of_kin: nextOfKin,
+            next_of_kin_email: nextOfKinEmail,
+          },
+          { onConflict: "id", ignoreDuplicates: true },
+        );
+        if (insertError)
+          console.warn("Profile fallback insert error:", insertError);
+      }
 
       const trackingCode = "NYSC-" + Math.floor(10000 + Math.random() * 90000);
-      const initialLat = startCoords?.lat || 9.082;
-      const initialLng = startCoords?.lng || 8.6753;
 
+      // Leave coordinates null when there is no GPS fix — fabricating a
+      // position (e.g. the centre of Nigeria) misleads parents and admins
+      // watching the map. The trip starts broadcasting real coordinates
+      // from the device once the journey begins.
       const { error: tripError } = await supabase.from("trips").insert({
         pcm_id: userId,
         plate_number: "",
@@ -193,8 +226,8 @@ export function RegisterTripForm({
         institution,
         status: "pending",
         tracking_code: trackingCode,
-        current_lat: initialLat,
-        current_lng: initialLng,
+        current_lat: startCoords?.lat ?? null,
+        current_lng: startCoords?.lng ?? null,
       });
       if (tripError) throw tripError;
 
@@ -237,7 +270,7 @@ export function RegisterTripForm({
 
           {/* error rendering */}
           {error && (
-            <div className="mb-6 bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 border border-red-100">
+            <div className="mb-6 bg-destructive/10 text-destructive p-3 rounded-lg text-sm flex items-center gap-2 border border-destructive/20">
               <AlertCircle size={16} />
               {error}
             </div>
@@ -290,27 +323,28 @@ export function RegisterTripForm({
                     <Combobox
                       items={stateList}
                       autoHighlight
-                      onValueChange={(
-                        e: { state: string; campName: string } | null,
-                      ) => {
+                      itemToStringLabel={stateToInputText}
+                      itemToStringValue={stateToInputText}
+                      onValueChange={(e: StateOption | null) => {
                         setDestination(e);
                       }}
-                      filter={(item, search) =>
-                        // @ts-ignore
+                      filter={(item: StateOption, search: string) =>
                         item.state
                           .toLowerCase()
                           .includes(search.toLowerCase()) ||
-                        // @ts-ignore
-                        item.campName
-                          .toLowerCase()
-                          .includes(search.toLowerCase())
+                        item.campName.toLowerCase().includes(search.toLowerCase())
                       }
                       required
                       highlightItemOnHover
                       id="destination"
                     >
                       <ComboboxInput
-                        placeholder="Select Destination Camp"
+                        placeholder={
+                          stateList.length
+                            ? "Select Destination Camp"
+                            : "Loading destinations…"
+                        }
+                        disabled={!stateList.length}
                         id="destination"
                         showClear
                       >
@@ -378,12 +412,18 @@ export function RegisterTripForm({
                       }
                       onValueChange={(e: string | null) => {
                         e && setInstitution(e);
-                        console.log(e);
                       }}
                       highlightItemOnHover
                       id="institution"
                     >
-                      <ComboboxInput placeholder="Select Institution">
+                      <ComboboxInput
+                        placeholder={
+                          schoolList.length
+                            ? "Select Institution"
+                            : "Loading institutions…"
+                        }
+                        disabled={!schoolList.length}
+                      >
                         <InputGroupAddon>
                           <Building2 size={20} />
                         </InputGroupAddon>
@@ -392,7 +432,7 @@ export function RegisterTripForm({
                         alignOffset={-28}
                         className="w-72 max-h-60 overflow-y-auto"
                       >
-                        <ComboboxEmpty>No states found.</ComboboxEmpty>
+                        <ComboboxEmpty>No institutions found.</ComboboxEmpty>
                         <ComboboxList>
                           {(group) => (
                             <ComboboxGroup

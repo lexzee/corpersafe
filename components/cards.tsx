@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { CopyButton, ShareButton, ViewHistoryButton } from "./buttons";
+import { Input } from "./ui/input";
 
 export const TripStatus = ({
   trip,
@@ -38,7 +39,7 @@ export const TripStatus = ({
             <p className="text-xs font-bold text-warning uppercase">
               Vehicle Stopped
             </p>
-            <p className="font-bold text-slate-800">
+            <p className="font-bold text-foreground">
               {trip.pause_reason || "No reason provided"}
             </p>
           </div>
@@ -64,10 +65,14 @@ export const TripPending = ({
   trip,
   handleStartTrip,
   starting,
+  plateNumber,
+  setPlateNumber,
 }: {
   trip: any;
   handleStartTrip: () => void;
   starting: boolean;
+  plateNumber: string;
+  setPlateNumber: (value: string) => void;
 }) => {
   return (
     <div className="min-h-screen bg-muted/30 flex flex-col items-center justify-center p-6 text-center">
@@ -82,7 +87,8 @@ export const TripPending = ({
         <p className="text-muted-foreground mb-6">
           You are set to travel to <strong>{trip.destination_state}</strong>.{" "}
           <br />
-          Wait until the vehicle moves to start tracking.
+          Once you&apos;re seated in the vehicle, add the plate number below
+          and tap START JOURNEY — your family can then follow you live.
         </p>
 
         <div className="bg-muted/50 p-4 rounded-xl border border-border mb-6 text-left">
@@ -91,7 +97,7 @@ export const TripPending = ({
               Vehicle
             </span>
             <span className="font-mono font-bold text-foreground">
-              {trip.plate_number}
+              {plateNumber || trip.plate_number || "Not provided"}
             </span>
           </div>
           <div className="flex justify-between">
@@ -102,6 +108,30 @@ export const TripPending = ({
               {trip.tracking_code}
             </span>
           </div>
+        </div>
+
+        {/* Plate number — collected at boarding time, when the traveler
+            actually knows the vehicle they're in. No registry verification. */}
+        <div className="text-left mb-6">
+          <label
+            htmlFor="plateNumber"
+            className="text-xs font-bold text-muted-foreground uppercase"
+          >
+            Vehicle plate number{" "}
+            <span className="normal-case font-medium">(add when you board)</span>
+          </label>
+          <Input
+            id="plateNumber"
+            value={plateNumber}
+            onChange={(e) => setPlateNumber(e.target.value.toUpperCase())}
+            placeholder="e.g. ABC-123-XY"
+            maxLength={15}
+            className="mt-1 font-mono uppercase"
+          />
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Included in SOS alerts and on your admin watch-card. You can start
+            without it, but it helps responders find your vehicle.
+          </p>
         </div>
 
         <button
@@ -155,48 +185,56 @@ export const PauseModal = ({
           <h3 className="text-lg font-bold text-card-foreground">
             Why are you stopping?
           </h3>
-          <button onClick={() => setShowPauseModal(false)}>
+          <button
+            onClick={() => setShowPauseModal(false)}
+            aria-label="Close"
+            className="rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
             <X size={24} className="text-muted-foreground" />
           </button>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => confirmPause("Buying Food / Refreshment")}
-            className="p-4 bg-blue-50 text-blue-700 rounded-xl font-bold text-sm flex flex-col items-center gap-2 hover:bg-blue-100"
-          >
-            <Utensils size={24} /> Food / Eat
-          </button>
-          <button
-            onClick={() => confirmPause("Traffic / Go Slow")}
-            className="p-4 bg-orange-50 text-orange-700 rounded-xl font-bold text-sm flex flex-col items-center gap-2 hover:bg-orange-100"
-          >
-            <Car size={24} /> Traffic
-          </button>
-          <button
-            onClick={() => confirmPause("Vehicle Repair / Fault")}
-            className="p-4 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm flex flex-col items-center gap-2 hover:bg-slate-100"
-          >
-            <Wrench size={24} /> Repair
-          </button>
-          <button
-            onClick={() => confirmPause("Overnight Sleep")}
-            className="p-4 bg-indigo-50 text-indigo-700 rounded-xl font-bold text-sm flex flex-col items-center gap-2 hover:bg-indigo-100"
-          >
-            <Moon size={24} /> Sleep (Night)
-          </button>
-          <button
-            onClick={() => confirmPause("Police / Army Checkpoint")}
-            className="p-4 bg-red-50 text-red-700 rounded-xl font-bold text-sm flex flex-col items-center gap-2 hover:bg-red-100"
-          >
-            <Shield size={24} /> Checkpoint
-          </button>
-          <button
-            onClick={() => confirmPause("Other Reason")}
-            className="p-4 bg-gray-50 text-gray-700 rounded-xl font-bold text-sm flex flex-col items-center gap-2 hover:bg-gray-100"
-          >
-            <AlertTriangle size={24} /> Other
-          </button>
+          {[
+            {
+              reason: "Buying Food / Refreshment",
+              label: "Food / Eat",
+              icon: <Utensils size={24} className="text-blue-500" />,
+            },
+            {
+              reason: "Traffic / Go Slow",
+              label: "Traffic",
+              icon: <Car size={24} className="text-orange-500" />,
+            },
+            {
+              reason: "Vehicle Repair / Fault",
+              label: "Repair",
+              icon: <Wrench size={24} className="text-slate-500" />,
+            },
+            {
+              reason: "Overnight Sleep",
+              label: "Sleep (Night)",
+              icon: <Moon size={24} className="text-indigo-500" />,
+            },
+            {
+              reason: "Police / Army Checkpoint",
+              label: "Checkpoint",
+              icon: <Shield size={24} className="text-red-500" />,
+            },
+            {
+              reason: "Other Reason",
+              label: "Other",
+              icon: <AlertTriangle size={24} className="text-gray-500" />,
+            },
+          ].map((o) => (
+            <button
+              key={o.reason}
+              onClick={() => confirmPause(o.reason)}
+              className="p-4 bg-muted text-foreground border border-border rounded-xl font-bold text-sm flex flex-col items-center gap-2 hover:bg-muted/60 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {o.icon} {o.label}
+            </button>
+          ))}
         </div>
       </div>
     </div>

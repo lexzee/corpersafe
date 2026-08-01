@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { createClient } from "./supabase/client";
+import { toast } from "./toast";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -11,6 +12,38 @@ export function tripIsStale(trip: any) {
   const seconds =
     (new Date().getTime() - new Date(trip.last_updated).getTime()) / 1000;
   return seconds > 120; // 2 minutes
+}
+
+// Sanitize a post-login redirect target — same-origin paths only, never
+// protocol-relative URLs (prevents open redirects via ?next=evil.com).
+export function safeNextPath(value: string | null | undefined) {
+  if (!value) return null;
+  return value.startsWith("/") && !value.startsWith("//") ? value : null;
+}
+
+// Roles with access to the admin monitoring dashboard. Keep in sync with the
+// profiles.role enum / the is_admin() SQL helper.
+export const ADMIN_ROLES = [
+  "admin",
+  "super_admin",
+  "state_admin",
+  "school_admin",
+] as const;
+
+export function isAdminRole(role: string | null | undefined) {
+  return !!role && (ADMIN_ROLES as readonly string[]).includes(role);
+}
+
+// Parents type tracking codes every possible way: "53198", "nysc 53198",
+// "NYSC53198", "NYSC-53198". Normalise to the stored "NYSC-#####" form;
+// returns "" when nothing usable was entered.
+export function normalizeTrackingCode(raw: string | null | undefined) {
+  const compact = (raw ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  const id = compact.replace(/^NYSC-?/, "");
+  return id ? `NYSC-${id}` : "";
 }
 
 export function timeAgo(dateString: string) {
@@ -25,19 +58,23 @@ export function timeAgo(dateString: string) {
 
 export const runSafetyCheck = async (
   silent = false,
-  enableAudio: () => void,
-  setLoading: (value: React.SetStateAction<boolean>) => void,
-  setTrips: (value: React.SetStateAction<any[]>) => void,
+  enableAudio?: () => void,
+  setLoading?: (value: React.SetStateAction<boolean>) => void,
+  setTrips?: (value: React.SetStateAction<any[]>) => void,
+  notify?: (message: string, kind?: "info" | "success" | "warning" | "error") => void,
 ) => {
   const supabase = createClient();
-  enableAudio();
-  if (!silent) setLoading(true);
+  enableAudio?.();
+  if (!silent) setLoading?.(true);
   const { data, error } = await supabase.rpc("check_signal_loss");
 
   if (!silent) {
     if (error) {
       console.error("Safety Check Failed:", error);
-      alert("Check Failed, Check Console.");
+      notify?.(
+        "Safety check failed — check the browser console for details.",
+        "error",
+      );
     } else {
       const { newly_flagged, total_danger } = data as {
         newly_flagged: number;
@@ -45,15 +82,17 @@ export const runSafetyCheck = async (
       };
 
       if (newly_flagged > 0) {
-        alert(
-          `⚠️ WARNING: ${newly_flagged} new signals lost! Total Danger: ${total_danger}`,
+        notify?.(
+          `${newly_flagged} new signal${newly_flagged > 1 ? "s" : ""} lost. Trips currently in danger: ${total_danger}.`,
+          "error",
         );
       } else if (total_danger > 0) {
-        alert(
-          `ℹ️ Scan Complete. No NEW lost signals.\n\nHowever. ${total_danger} trips are currently in DANGER sate.`,
+        notify?.(
+          `Scan complete — no NEW lost signals.\n${total_danger} trip${total_danger > 1 ? "s are" : " is"} still in danger.`,
+          "warning",
         );
       } else {
-        alert("✅ Scan Complete: All signals are fresh.");
+        notify?.("Scan complete — all signals are fresh.", "success");
       }
     }
   }
@@ -62,26 +101,30 @@ export const runSafetyCheck = async (
   const { data: newData } = await supabase
     .from("trips")
     .select("*, profiles(full_name, phone, next_of_kin)")
-    .neq("status", "completed");
-  if (newData) setTrips(newData);
-  setLoading(false);
+    .neq("status", "completed")
+    .neq("status", "resolved");
+  if (newData) setTrips?.(newData);
+  setLoading?.(false);
 };
 
 export const copyCode = (tracking_code: string) => {
   navigator.clipboard.writeText(tracking_code);
-  alert("Tracking code copied!");
+  toast("Tracking code copied!", "success");
 };
 
 export const shareCode = async (tracking_code: string) => {
+  // Include the code in the URL so the recipient opens the live map
+  // directly instead of having to type the code manually.
+  const url = `${window.location.origin}/track?code=${encodeURIComponent(tracking_code)}`;
   if (navigator.share) {
     try {
       await navigator.share({
         title: "Track my NYSC Journey",
-        text: `I'm on my way to camp. Track me here: ${tracking_code}`,
-        url: window.location.origin + "/track",
+        text: `I'm on my way to camp. Track my journey live: ${url}`,
+        url,
       });
     } catch (err) {
-      console.log("Share cancelled");
+      // Share cancelled — no action needed
     }
   } else {
     // Fallback
@@ -95,6 +138,7 @@ export const updateStatus = async (
   trip: any,
   setTrip: (value: React.SetStateAction<any>) => void,
   Location: [number, number],
+  options?: { navigateOnComplete?: boolean },
 ) => {
   const supabase = createClient();
   if (!trip) return;
@@ -120,9 +164,9 @@ export const updateStatus = async (
     status_at_time: trip.status,
   });
 
-  // Avoid calling React hooks from helpers. Use history API so client-side
-  // router can respond; fall back to full navigation if necessary.
-  if (status === "completed") {
+  // Navigation is opt-out: the "Arrived" undo flow defers to the parent
+  // dashboard, which reacts to the completed status itself.
+  if (status === "completed" && options?.navigateOnComplete !== false) {
     try {
       if (typeof window !== "undefined") {
         window.location.href = "/pcm";
