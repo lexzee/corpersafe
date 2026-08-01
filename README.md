@@ -29,6 +29,7 @@ Admins see trip on Mission Control ◄── live GPS (watchPosition) ── pho
 
 - **Trip registration** with GPS-detected origin (OSM Nominatim reverse geocode), DB-backed camp/institution pickers, and next-of-kin contacts.
 - **Live tracking** via `watchPosition` with speed calculation, auto-pause after 5 min stopped (< 5 km/h) and auto-resume (> 10 km/h), with one-tap override.
+- **Planned routes everywhere:** the destination is pinned and a route line connects it to the traveler (origin → destination on Mission Control and the parents' tracker, live position → destination on the traveler's map) with a distance-to-camp readout. Camp coordinates are geocoded via free OSM Nominatim (cached) with built-in per-state centroids as the offline fallback — no paid routing/geocoding APIs.
 - **Resilient by design:** screen wake-lock, offline GPS queue in `localStorage` (synced on reconnect), low-battery & connection warnings.
 - **SOS:** hold-3s activation with haptics → 5s undo window → status `danger` + next-of-kin email (EmailJS) + admin alarm. False alarms can be cancelled; admins run a `danger → responding → resolved` incident workflow with an audit trail.
 - **Parents' tracker** (`/track`): no login, realtime updates, stale-signal reassurance copy.
@@ -47,13 +48,15 @@ Create a project at [database.new](https://database.new). You'll need these tabl
 | Table | Purpose |
 |---|---|
 | `profiles` | `full_name`, `phone`, `role`, `jurisdiction`, `next_of_kin`, `next_of_kin_email` |
-| `trips` | journey rows: `pcm_id`, `origin`, `destination_state/camp`, `institution`, `status`, `tracking_code`, `plate_number`, `current_lat/lng`, `current_speed`, `last_updated` |
+| `trips` | journey rows: `pcm_id`, `origin`, `destination_state/camp`, `institution`, `status`, `tracking_code`, `plate_number`, `current_lat/lng`, `current_speed`, `last_updated`, `is_demo` (demo-cleanup migration) |
 | `trip_logs` | GPS breadcrumb history (route replay) |
 | `alert_logs` | SOS email + admin action audit trail |
 | `allowed_states` / `allowed_institutions` | camp & school pickers |
 | `vehicles` | *(legacy)* plate registry — verification feature currently removed from the app |
 
-Plus the RPC functions `check_signal_loss()` (dead-man's-switch scan) and `generate_demo_traffic(admin_id)` (demo data).
+Plus the RPC functions `check_signal_loss()` (dead-man's-switch scan), `generate_demo_traffic(admin_id)` (demo data) and `delete_demo_traffic()` (removes demo trips — added by the demo-cleanup migration, see below).
+
+> **Demo cleanup migration** — apply `20260802000003_demo_trips_cleanup.sql` to add the `trips.is_demo` flag and the `delete_demo_traffic()` RPC. It lets admins **stop the demo and delete the fake trips from the UI** (the Mission Control "Simulate" button becomes "Stop Demo" while demo trips exist) instead of cleaning up in the Supabase dashboard. The delete matches `is_demo` or the demo fingerprint (`plate_number` starting with `DEMO`, `origin`/`institution` containing `demo`); adjust the SQL if your generator differs.
 
 ### 2. Anonymous public tracking (required for `/track`)
 

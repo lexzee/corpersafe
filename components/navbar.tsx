@@ -13,7 +13,7 @@ import {
 } from "./buttons";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function UserNavbar({
   status,
@@ -82,12 +82,33 @@ export function AdminNavbar({
   const supabase = createClient();
   const [demoArmed, setDemoArmed] = useState(false);
   const demoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Whether fake demo trips currently exist (so the button toggles between
+  // "Simulate" and "Stop Demo") and how many there are.
+  const [demoActive, setDemoActive] = useState(false);
+  const [demoCount, setDemoCount] = useState(0);
+
+  // Demo fingerprint used by generate_demo_traffic() (kept in sync with
+  // supabase/migrations/…demo_trips_cleanup.sql). The Stop Demo button can
+  // only remove trips matching this pattern — real journeys are never at risk.
+  const DEMO_FINGERPRINT =
+    "plate_number.ilike.DEMO%,origin.ilike.%demo%,institution.ilike.%demo%";
+
+  const checkDemoTrips = useCallback(async () => {
+    const { data } = await supabase
+      .from("trips")
+      .select("id")
+      .or(DEMO_FINGERPRINT);
+    const count = data?.length ?? 0;
+    setDemoCount(count);
+    setDemoActive(count > 0);
+  }, [supabase]);
 
   useEffect(() => {
+    void checkDemoTrips();
     return () => {
       if (demoTimer.current) clearTimeout(demoTimer.current);
     };
-  }, []);
+  }, [checkDemoTrips]);
 
   // Manual "Dead Man Switch" scan — the util needs its dependencies and a
   // toast notifier (previously it was called bare, crashing on enableAudio,
@@ -95,8 +116,27 @@ export function AdminNavbar({
   const handleSafetyCheck = () =>
     runSafetyCheck?.(false, () => {}, setLoading, setTrips, toast);
 
-  // Two-phase demo trigger instead of confirm()
+  // Two-phase trigger (instead of confirm()) for BOTH actions: the button is
+  // "Simulate" when no demo trips exist and "Stop Demo" when they do.
   const handleDemoClick = () => {
+    if (demoActive) {
+      if (!demoArmed) {
+        setDemoArmed(true);
+        toast(
+          demoCount > 0
+            ? `Demo mode is on (${demoCount} fake trip${demoCount > 1 ? "s" : ""}). Tap Stop Demo again to remove them.`
+            : "Demo mode is on. Tap Stop Demo again to remove the fake trips.",
+          "warning",
+        );
+        demoTimer.current = setTimeout(() => setDemoArmed(false), 5000);
+        return;
+      }
+      if (demoTimer.current) clearTimeout(demoTimer.current);
+      setDemoArmed(false);
+      void stopDemo();
+      return;
+    }
+
     if (!demoArmed) {
       setDemoArmed(true);
       toast(
@@ -121,6 +161,14 @@ export function AdminNavbar({
       toast("Error generating demo data.", "error");
     } else {
       toast("Demo traffic generated — check the map.", "success");
+      setDemoActive(true);
+      setDemoCount((c) => c + 5);
+      // Best-effort flag so Stop Demo can remove exactly these (the delete
+      // RPC also matches by fingerprint, so this is purely for the flag).
+      await supabase
+        .from("trips")
+        .update({ is_demo: true })
+        .or(DEMO_FINGERPRINT);
       // Trigger refetch
       const { data } = await supabase
         .from("trips")
@@ -129,6 +177,65 @@ export function AdminNavbar({
         .neq("status", "resolved");
       if (data) setTrips(data);
     }
+    setLoading(false);
+  };
+
+  // Stop demo + delete the fake trips (and their GPS/audit rows) without
+  // touching the Supabase dashboard. Prefers the SECURITY DEFINER RPC from
+  // the migration (RLS has no delete policy on trips); falls back to direct
+  // client deletes if the migration hasn't been applied yet.
+  const stopDemo = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.rpc("delete_demo_traffic");
+
+    if (error || data == null) {
+      console.warn("delete_demo_traffic RPC unavailable:", error);
+      try {
+        const { data: demo, error: fetchError } = await supabase
+          .from("trips")
+          .select("id")
+          .or(DEMO_FINGERPRINT);
+        if (fetchError) throw fetchError;
+        const ids = (demo || []).map((t) => t.id);
+        for (const id of ids) {
+          await supabase.from("trip_logs").delete().eq("trip_id", id);
+          await supabase.from("alert_logs").delete().eq("trip_id", id);
+          await supabase.from("trips").delete().eq("id", id);
+        }
+        toast(
+          ids.length > 0
+            ? `Demo stopped — ${ids.length} fake trip${ids.length > 1 ? "s" : ""} removed.`
+            : "No demo trips found.",
+          ids.length > 0 ? "success" : "info",
+        );
+        setDemoActive(false);
+        setDemoCount(0);
+      } catch (e) {
+        console.error("Demo cleanup failed:", e);
+        toast(
+          "Could not remove demo trips — the DB migration may be missing.",
+          "error",
+        );
+      }
+    } else {
+      const removed = Number(data) || 0;
+      toast(
+        removed > 0
+          ? `Demo stopped — ${removed} fake trip${removed > 1 ? "s" : ""} removed.`
+          : "No demo trips found.",
+        removed > 0 ? "success" : "info",
+      );
+      setDemoActive(false);
+      setDemoCount(0);
+    }
+
+    // Refresh the trip list either way
+    const { data: trips } = await supabase
+      .from("trips")
+      .select("*, profiles(full_name, phone, next_of_kin)")
+      .neq("status", "completed")
+      .neq("status", "resolved");
+    if (trips) setTrips(trips);
     setLoading(false);
   };
 
@@ -154,8 +261,13 @@ export function AdminNavbar({
         {/* Mute Button */}
         <MuteButton isMuted={isMuted} setIsMuted={setIsMuted} />
 
-        {/* DEMO BUTTON */}
-        <DemoButton generateDemoData={handleDemoClick} armed={demoArmed} />
+        {/* DEMO BUTTON — Simulate ⇄ Stop Demo (removes the fake trips) */}
+        <DemoButton
+          generateDemoData={handleDemoClick}
+          armed={demoArmed}
+          demoActive={demoActive}
+          onStopDemo={handleDemoClick}
+        />
 
         {/* Safety Check Button */}
         <SafetyCheckButton

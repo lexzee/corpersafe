@@ -2,14 +2,23 @@
 
 // @ts-ignore
 import "leaflet/dist/leaflet.css";
-import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
+import {
+  MapContainer,
+  Marker,
+  Polyline,
+  Popup,
+  TileLayer,
+  useMap,
+} from "react-leaflet";
 import icon from "leaflet/dist/images/marker-icon.png";
 import iconShadow from "leaflet/dist/images/marker-shadow.png";
 import L from "leaflet";
-import { useEffect } from "react";
+import { Fragment, useEffect } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import TripDetails from "./trip-details";
 import { useTheme } from "next-themes";
+import { getDestinationPoint, getOriginPoint } from "@/lib/geo";
+import { destinationIcon } from "@/components/map-icons";
 
 const DefaultIcon = L.icon({
   // @ts-ignore
@@ -88,25 +97,53 @@ export function AdminMapView({
               : "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
           }
         />
-        {displayTrips.map(
-          (trip: any) =>
-            trip.current_lat && (
-              <Marker
-                key={trip.id}
-                position={[trip.current_lat, trip.current_lng]}
-                icon={
-                  trip.status === "danger"
-                    ? Icons.danger
-                    : trip.status === "responding"
-                      ? Icons.responding
-                      : trip.status === "paused"
-                        ? Icons.paused
-                        : Icons.active
-                }
-                eventHandlers={{ click: () => setSelectedTrip(trip) }}
-              />
-            ),
-        )}
+        {displayTrips.map((trip: any) => {
+          // Planned route: origin -> destination. Origin uses the live fix
+          // when broadcasting, otherwise the state matched from the origin
+          // text; destination uses the state centroid (offline, no rate
+          // limits — the admin map renders many trips at once).
+          const destination = getDestinationPoint(trip);
+          const origin = getOriginPoint(trip);
+          return (
+            <Fragment key={trip.id}>
+              {trip.current_lat != null && trip.current_lng != null && (
+                <Marker
+                  position={[trip.current_lat, trip.current_lng]}
+                  icon={
+                    trip.status === "danger"
+                      ? Icons.danger
+                      : trip.status === "responding"
+                        ? Icons.responding
+                        : trip.status === "paused"
+                          ? Icons.paused
+                          : Icons.active
+                  }
+                  eventHandlers={{ click: () => setSelectedTrip(trip) }}
+                />
+              )}
+              {destination && (
+                <Marker position={destination} icon={destinationIcon}>
+                  <Popup>
+                    <strong>
+                      {trip.destination_camp || trip.destination_state} Camp
+                    </strong>
+                    <br />
+                    {trip.destination_state} · Planned destination
+                  </Popup>
+                </Marker>
+              )}
+              {origin && destination && (
+                <Polyline
+                  positions={[origin, destination]}
+                  color="#3b82f6"
+                  weight={2}
+                  dashArray="6 6"
+                  opacity={0.55}
+                />
+              )}
+            </Fragment>
+          );
+        })}
         <MapController selectedTrip={selectedTrip} />
       </MapContainer>
 
@@ -121,7 +158,14 @@ export function AdminMapView({
     </div>
   );
 }
-export function UserMapView({ currentLoc, speed, trip, hasFix = true }: any) {
+export function UserMapView({
+  currentLoc,
+  speed,
+  trip,
+  hasFix = true,
+  destination = null,
+  routeFrom = null,
+}: any) {
   const { resolvedTheme } = useTheme();
 
   return (
@@ -146,6 +190,27 @@ export function UserMapView({ currentLoc, speed, trip, hasFix = true }: any) {
           <Marker position={currentLoc} icon={DefaultIcon}>
             <Popup>You are here, Speed: {speed} km/h</Popup>
           </Marker>
+        )}
+        {/* Planned destination + route to it */}
+        {destination && (
+          <Marker position={destination} icon={destinationIcon}>
+            <Popup>
+              <strong>
+                {trip.destination_camp || trip.destination_state} Camp
+              </strong>
+              <br />
+              {trip.destination_state} · Planned destination
+            </Popup>
+          </Marker>
+        )}
+        {routeFrom && destination && (
+          <Polyline
+            positions={[routeFrom, destination]}
+            color="#3b82f6"
+            weight={3}
+            dashArray="8 6"
+            opacity={0.75}
+          />
         )}
         {hasFix && <MapUpdater center={currentLoc} />}
       </MapContainer>

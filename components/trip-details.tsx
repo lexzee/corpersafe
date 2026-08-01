@@ -66,6 +66,14 @@ const TripDetails = ({
           )}
         </div>
         <div className="flex justify-between py-2 border-b border-border">
+          <span className="text-muted-foreground">Planned Route</span>
+          <span className="text-right font-medium text-foreground">
+            {selectedTrip.origin || "?"}{" "}
+            <span className="text-primary">➔</span>{" "}
+            {selectedTrip.destination_state || "?"}
+          </span>
+        </div>
+        <div className="flex justify-between py-2 border-b border-border">
           <span className="text-muted-foreground">Kin Email</span>
           {selectedTrip.profiles?.next_of_kin_email ? (
             <a

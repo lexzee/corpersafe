@@ -10,6 +10,7 @@ import {
   PlayCircle,
   RefreshCw,
   Share2,
+  StopCircle,
   Users,
   Volume2,
   VolumeX,
@@ -224,22 +225,35 @@ export function MuteButton({
 export function DemoButton({
   generateDemoData,
   armed = false,
+  demoActive = false,
+  onStopDemo,
 }: {
   generateDemoData: () => void;
   armed?: boolean;
+  demoActive?: boolean;
+  onStopDemo?: () => void;
 }) {
+  const handleClick = demoActive ? onStopDemo : generateDemoData;
   return (
     <button
-      onClick={generateDemoData}
-      aria-label="Simulate demo traffic"
-      title="Generate 5 demo trips (tap twice)"
-      className={`flex items-center gap-2 px-3 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-bold hover:bg-primary/90 active:scale-95 transition shadow-lg shadow-primary/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-        armed ? "ring-2 ring-primary-foreground/70 animate-pulse" : ""
-      }`}
+      onClick={handleClick}
+      aria-label={
+        demoActive ? "Remove all demo trips" : "Simulate demo traffic"
+      }
+      title={
+        demoActive
+          ? "Remove all demo trips (tap twice)"
+          : "Generate 5 demo trips (tap twice)"
+      }
+      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold active:scale-95 transition shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+        demoActive
+          ? "bg-destructive text-destructive-foreground shadow-destructive/20 hover:bg-destructive/90"
+          : "bg-primary text-primary-foreground shadow-primary/20 hover:bg-primary/90"
+      } ${armed ? "ring-2 ring-primary-foreground/70 animate-pulse" : ""}`}
     >
-      <PlayCircle size={16} />
+      {demoActive ? <StopCircle size={16} /> : <PlayCircle size={16} />}
       <span className="hidden sm:inline">
-        {armed ? "Tap to Confirm" : "Simulate"}
+        {armed ? "Tap to Confirm" : demoActive ? "Stop Demo" : "Simulate"}
       </span>
     </button>
   );

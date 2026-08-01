@@ -17,7 +17,13 @@ import {
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { normalizeTrackingCode, timeAgo, tripIsStale } from "@/lib/utils";
+import {
+  getDistanceFromLatLonInKm,
+  normalizeTrackingCode,
+  timeAgo,
+  tripIsStale,
+} from "@/lib/utils";
+import { geocodeDestination, getOriginPoint } from "@/lib/geo";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -45,6 +51,9 @@ export default function TrackPageContent({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  // Planned destination point — precise geocode of the camp when available,
+  // otherwise the destination state's centroid (offline fallback).
+  const [destCoords, setDestCoords] = useState<[number, number] | null>(null);
   // Realtime connection health — shown to parents as Live / Connecting
   const [connState, setConnState] = useState<"connecting" | "live" | "offline">(
     "offline",
@@ -66,6 +75,7 @@ export default function TrackPageContent({
     setLoading(true);
     setError("");
     setTrip(null);
+    setDestCoords(null);
 
     try {
       // 1. Fetch Trip Data + Driver/PCM Info
@@ -86,6 +96,11 @@ export default function TrackPageContent({
       setTrip(data);
       // last_updated is null until the traveler starts broadcasting GPS
       setLastUpdate(data.last_updated ? new Date(data.last_updated) : null);
+      // Resolve the planned route destination (async precise geocode, with
+      // an immediate state-centroid fallback already baked into the helper).
+      void geocodeDestination(data).then((point) => {
+        if (point) setDestCoords(point);
+      });
     } catch (err: any) {
       setError("Tracking ID not found or trip has ended.");
     } finally {
@@ -188,6 +203,26 @@ export default function TrackPageContent({
     trip &&
     ["active", "paused", "danger", "responding"].includes(trip.status) &&
     tripIsStale(trip);
+
+  // Planned route anchor: the live fix once moving, otherwise the state
+  // matched from the origin text — so parents see the plan before GPS starts.
+  const originCoords = trip ? getOriginPoint(trip) : null;
+  const hasLiveFix = trip?.current_lat != null && trip?.current_lng != null;
+  const mapAnchor: [number, number] | null = hasLiveFix
+    ? [trip.current_lat, trip.current_lng]
+    : originCoords;
+
+  // Straight-line distance from the current fix to the planned destination.
+  const distanceToDest =
+    hasLiveFix && destCoords
+      ? getDistanceFromLatLonInKm(
+          trip.current_lat,
+          trip.current_lng,
+          destCoords[0],
+          destCoords[1],
+        )
+      : null;
+
   return (
     <div className="min-h-screen bg-muted/30 flex flex-col">
       {/* Header */}
@@ -319,20 +354,28 @@ export default function TrackPageContent({
               </div>
             )}
 
-            {/* Map View — the traveler may not have a GPS fix yet */}
+            {/* Map View — the traveler may not have a GPS fix yet, but the
+                planned route (departure ➔ destination) is always visible */}
             <div className="bg-card p-1 rounded-2xl shadow-sm border border-border h-80 z-0 relative">
-              {trip.current_lat != null && trip.current_lng != null ? (
-                <TrackingMap lat={trip.current_lat} lng={trip.current_lng} />
+              {mapAnchor ? (
+                <TrackingMap
+                  lat={mapAnchor[0]}
+                  lng={mapAnchor[1]}
+                  destination={destCoords}
+                  origin={originCoords}
+                  live={hasLiveFix}
+                />
               ) : (
                 <div className="h-full w-full flex flex-col items-center justify-center gap-3 rounded-xl bg-muted/40 text-center p-6">
                   <MapPin size={32} className="text-muted-foreground" />
                   <div>
                     <p className="font-bold text-foreground">
-                      No live location yet
+                      No location info yet
                     </p>
                     <p className="text-sm text-muted-foreground">
                       The traveler hasn&apos;t started sharing their GPS
-                      location. The map will appear here once the journey
+                      location, and no departure point was captured at
+                      registration. The map will appear once the journey
                       begins.
                     </p>
                   </div>
@@ -374,6 +417,12 @@ export default function TrackPageContent({
                     <span className="text-primary">➔</span>
                     <span>{trip.destination_state}</span>
                   </div>
+                  {distanceToDest != null && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      ≈ {distanceToDest.toFixed(1)} km from the current
+                      position to the camp
+                    </p>
+                  )}
                 </div>
                 <div>
                   <label className="text-xs text-muted-foreground uppercase font-bold">
