@@ -239,7 +239,7 @@ export function RegisterTripForm({
 
           {/* error rendering */}
           {error && (
-            <div className="mb-6 bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 border border-red-100">
+            <div className="mb-6 bg-destructive/10 text-destructive p-3 rounded-lg text-sm flex items-center gap-2 border border-destructive/20">
               <AlertCircle size={16} />
               {error}
             </div>
@@ -380,7 +380,6 @@ export function RegisterTripForm({
                       }
                       onValueChange={(e: string | null) => {
                         e && setInstitution(e);
-                        console.log(e);
                       }}
                       highlightItemOnHover
                       id="institution"

@@ -12,6 +12,8 @@ import {
   SafetyCheckButton,
 } from "./buttons";
 import { createClient } from "@/lib/supabase/client";
+import { toast } from "@/lib/toast";
+import { useEffect, useRef, useState } from "react";
 
 export function UserNavbar({
   status,
@@ -43,10 +45,18 @@ export function UserNavbar({
           </div>
         </div>
         <div className="flex items-center">
-          <Button variant={"ghost"} onClick={() => router.push("/history")}>
+          <Button
+            variant={"ghost"}
+            aria-label="Trip history"
+            onClick={() => router.push("/history")}
+          >
             <History size={20} />
           </Button>
-          <Button variant={"ghost"} onClick={() => router.push("/profile")}>
+          <Button
+            variant={"ghost"}
+            aria-label="Profile"
+            onClick={() => router.push("/profile")}
+          >
             <User size={20} />
           </Button>
           <ThemeSwitcher />
@@ -70,18 +80,47 @@ export function AdminNavbar({
   profile,
 }: any) {
   const supabase = createClient();
+  const [demoArmed, setDemoArmed] = useState(false);
+  const demoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (demoTimer.current) clearTimeout(demoTimer.current);
+    };
+  }, []);
+
+  // Manual "Dead Man Switch" scan — the util needs its dependencies and a
+  // toast notifier (previously it was called bare, crashing on enableAudio,
+  // and reported results via blocking alert()s).
+  const handleSafetyCheck = () =>
+    runSafetyCheck?.(false, () => {}, setLoading, setTrips, toast);
+
+  // Two-phase demo trigger instead of confirm()
+  const handleDemoClick = () => {
+    if (!demoArmed) {
+      setDemoArmed(true);
+      toast(
+        "Demo mode — tap Simulate again within 5s to create 5 fake trips.",
+        "info",
+      );
+      demoTimer.current = setTimeout(() => setDemoArmed(false), 5000);
+      return;
+    }
+    if (demoTimer.current) clearTimeout(demoTimer.current);
+    setDemoArmed(false);
+    void generateDemoData();
+  };
 
   const generateDemoData = async () => {
-    if (!confirm("Start Demo Mode? This will create 5 fake trips.")) return;
     setLoading(true);
     const { error } = await supabase.rpc("generate_demo_traffic", {
       admin_id: user?.id,
     });
     if (error) {
       console.error(error);
-      alert("Error generating demo data");
+      toast("Error generating demo data.", "error");
     } else {
-      alert("✅ Demo Traffic Generated! Check the map.");
+      toast("Demo traffic generated — check the map.", "success");
       // Trigger refetch
       const { data } = await supabase
         .from("trips")
@@ -116,10 +155,13 @@ export function AdminNavbar({
         <MuteButton isMuted={isMuted} setIsMuted={setIsMuted} />
 
         {/* DEMO BUTTON */}
-        <DemoButton generateDemoData={generateDemoData} />
+        <DemoButton generateDemoData={handleDemoClick} armed={demoArmed} />
 
         {/* Safety Check Button */}
-        <SafetyCheckButton runSafetyCheck={runSafetyCheck} loading={loading} />
+        <SafetyCheckButton
+          runSafetyCheck={handleSafetyCheck}
+          loading={loading}
+        />
 
         {/* Stats Pills ... */}
         {dangerCount > 0 && (

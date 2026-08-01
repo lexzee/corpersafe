@@ -4,6 +4,9 @@ import emailjs from "@emailjs/browser";
 const SERVICE_ID = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID;
 const TEMPLATE_ID = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID;
 const PUBLIC_KEY = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY;
+// Optional reply-to shown in the SOS email template. Configure per
+// deployment — this must NOT impersonate the NYSC Directorate.
+const REPLY_TO = process.env.NEXT_PUBLIC_EMAILJS_REPLY_TO;
 
 export const sendEmergencyEmail = async (
   tripId: string,
@@ -12,7 +15,7 @@ export const sendEmergencyEmail = async (
   trackingLink: string,
   plateNumber: string,
 ) => {
-  console.log(`Sending Email to ${recipientEmail}...`);
+  // Best-effort: failures are reported to the caller and alert_logs
   const supabase = createClient();
 
   // Guard: these run in the browser, so misconfiguration produces an
@@ -43,7 +46,7 @@ export const sendEmergencyEmail = async (
         pcm_name: pcmName,
         plate_number: plateNumber,
         tracking_link: trackingLink,
-        reply_to: "support@nysc.gov.ng",
+        ...(REPLY_TO ? { reply_to: REPLY_TO } : {}),
       },
       // PUBLIC_KEY
     );
@@ -60,7 +63,7 @@ export const sendEmergencyEmail = async (
 
     return { success: true };
   } catch (e: any) {
-    console.log("Email Error: ", e);
+    console.error("Email Error:", e);
 
     await supabase.from("alert_logs").insert({
       trip_id: tripId,

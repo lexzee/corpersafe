@@ -65,3 +65,14 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Respect reduced-motion preferences — disable pulses, pings, spins and
+   entrance animations (SOS pulse, live dots, loaders). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse,
+  .animate-ping,
+  .animate-spin,
+  .animate-in {
+    animation: none !important;
+  }
+}

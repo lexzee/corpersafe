@@ -21,6 +21,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { getDistanceFromLatLonInKm, updateStatus } from "@/lib/utils";
+import {
+  clearQueue,
+  enqueuePoint,
+  queueLength,
+  readQueue,
+} from "@/lib/offline-queue";
 import { User } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -149,6 +155,51 @@ function TrackingView({
     [],
   );
 
+  // Drain GPS points buffered while offline: update the live position with
+  // the newest fix and backfill trip_logs, so dead zones leave no gaps.
+  const flushOfflineQueue = useCallback(async () => {
+    if (!trip || !navigator.onLine) return;
+    const queued = readQueue(trip.id);
+    if (queued.length === 0) return;
+
+    const supabase = createClient();
+    try {
+      const latest = queued[queued.length - 1];
+      const { error } = await supabase
+        .from("trips")
+        .update({
+          current_lat: latest.lat,
+          current_lng: latest.lng,
+          current_speed: latest.speed,
+          last_updated: new Date().toISOString(),
+        })
+        .eq("id", trip.id);
+      if (error) throw error;
+
+      await supabase.from("trip_logs").insert(
+        queued.map((p) => ({
+          trip_id: trip.id,
+          lat: p.lat,
+          lng: p.lng,
+          status_at_time: trip.status,
+        })),
+      );
+
+      clearQueue(trip.id);
+      showToast(
+        `Back in coverage — ${queued.length} saved location${queued.length > 1 ? "s" : ""} synced.`,
+        "success",
+      );
+    } catch (e) {
+      console.warn("Offline queue flush failed:", e);
+    }
+  }, [trip, showToast]);
+
+  // Flush on mount / when the trip changes
+  useEffect(() => {
+    void flushOfflineQueue();
+  }, [flushOfflineQueue]);
+
   // Refs for Auto-Stop Logic
   const lastPosRef = useRef<{ lat: number; lng: number; time: number } | null>(
     null,
@@ -222,6 +273,7 @@ function TrackingView({
       setSyncIssue(false);
       syncFailCountRef.current = 0;
       showToast("Back online — live updates resumed.", "success");
+      void flushOfflineQueue();
     };
     const handleOffline = () => {
       setIsOnline(false);
@@ -255,12 +307,15 @@ function TrackingView({
         battery.removeEventListener("chargingchange", checkBattery);
       }
     };
-  }, [showToast]);
+  }, [showToast, flushOfflineQueue]);
 
   //   Real-time GPS Tracking
   useEffect(() => {
     if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser.");
+      showToast(
+        "Geolocation is not supported by this browser.",
+        "warning",
+      );
       return;
     }
 
@@ -318,7 +373,6 @@ function TrackingView({
           } else if (now - stopTimerRef.current > 300000) {
             // 5 Minutes
             // Trigger Auto-Pause
-            console.log("Auto-Pause Triggered");
             await updateStatus(
               "paused",
               "Traffic / Slow Movement",
@@ -346,7 +400,6 @@ function TrackingView({
         else if (currentSpeedKmh > 10 && trip.status === "paused") {
           if (isAutoPausedRef.current) {
             // Only auto-resume if WE auto-paused it (don't override manual stops)
-            console.log("Auto-Resume Triggered");
             await updateStatus("active", null, trip, setTrip, currentLoc);
             isAutoPausedRef.current = false;
             showToast("Movement detected — tracking resumed.", "success");
@@ -359,30 +412,47 @@ function TrackingView({
         }
 
         // C. REAL-TIME LOGGING TO SUPABASE
-        // Push to Supabase — treat repeated failures as a sync issue so the
-        // UI can warn the traveler instead of silently going stale.
-        const { error: positionError } = await supabase
-          .from("trips")
-          .update({
-            current_lat: latitude,
-            current_lng: longitude,
-            current_speed: Math.round(currentSpeedKmh),
-            last_updated: new Date().toISOString(),
-          })
-          .eq("id", trip.id);
-
-        if (positionError) {
-          console.error("Position sync failed:", positionError);
-          syncFailCountRef.current += 1;
-          if (syncFailCountRef.current >= 3) setSyncIssue(true);
+        // When offline (or failing repeatedly), buffer the point locally —
+        // dead zones must not create history gaps or false "signal lost"
+        // alarms. Repeated failures surface as a sync warning.
+        if (!navigator.onLine) {
+          enqueuePoint(trip.id, {
+            lat: latitude,
+            lng: longitude,
+            speed: Math.round(currentSpeedKmh),
+            ts: new Date(now).toISOString(),
+          });
         } else {
-          if (syncFailCountRef.current >= 3) setSyncIssue(false);
-          syncFailCountRef.current = 0;
+          const { error: positionError } = await supabase
+            .from("trips")
+            .update({
+              current_lat: latitude,
+              current_lng: longitude,
+              current_speed: Math.round(currentSpeedKmh),
+              last_updated: new Date().toISOString(),
+            })
+            .eq("id", trip.id);
+
+          if (positionError) {
+            console.error("Position sync failed:", positionError);
+            enqueuePoint(trip.id, {
+              lat: latitude,
+              lng: longitude,
+              speed: Math.round(currentSpeedKmh),
+              ts: new Date(now).toISOString(),
+            });
+            syncFailCountRef.current += 1;
+            if (syncFailCountRef.current >= 3) setSyncIssue(true);
+          } else {
+            if (syncFailCountRef.current >= 3) setSyncIssue(false);
+            syncFailCountRef.current = 0;
+            // Piggyback a queue drain on live GPS events
+            if (queueLength(trip.id) > 0) void flushOfflineQueue();
+          }
         }
 
         // D. HISTORICAL LOGGING
         if (now - lastLogTimeRef.current > 60000 * 1) {
-          console.log("Writing to Trip Logs...");
           const { error: logError } = await supabase.from("trip_logs").insert({
             trip_id: trip.id,
             lat: latitude,
@@ -403,7 +473,8 @@ function TrackingView({
     );
 
     return () => navigator.geolocation.clearWatch(geoId);
-  }, [trip]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- watch restarts only when the trip changes; currentLoc/supabase/setTrip are intentionally read from the closure
+  }, [trip, showToast, flushOfflineQueue]);
 
   const handleStartTrip = async () => {
     setStarting(true);
@@ -446,13 +517,19 @@ function TrackingView({
         },
         (err) => {
           console.error("Start trip GPS error:", err);
-          alert("Could not start trip. Check GPS permissions.");
+          showToast(
+            "Could not start the trip — check GPS permissions and try again.",
+            "warning",
+          );
           setStarting(false);
         },
         { enableHighAccuracy: true, timeout: 15000 },
       );
     } catch (e) {
-      alert("Could not start trip. Check GPS permissions.");
+      showToast(
+        "Could not start the trip — check GPS permissions and try again.",
+        "warning",
+      );
       setStarting(false);
     }
   };
@@ -486,7 +563,8 @@ function TrackingView({
   }
 
   return (
-    <div className="pb-24 min-h-screen bg-muted/30">
+    // Extra bottom padding keeps content clear of the floating SOS control
+    <div className="pb-36 min-h-screen bg-muted/30">
       <div className="bg-background border-b border-border p-2 sticky top-0 z-50">
         <Button variant="ghost" size="sm" onClick={onBack} className="gap-2">
           <ArrowLeft size={16} /> Back to Dashboard
@@ -802,8 +880,17 @@ export function PCMContent({
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-4">
         <Card
-          className="hover:bg-muted/50 transition-colors cursor-pointer"
+          className="hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => router.push("/history")}
+          role="link"
+          tabIndex={0}
+          aria-label="View trip history"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              router.push("/history");
+            }
+          }}
         >
           <CardContent className="p-6 flex flex-col items-center justify-center gap-3 text-center">
             <div className="p-3 bg-blue-100 text-blue-600 rounded-full dark:bg-blue-900/20 dark:text-blue-400">
@@ -813,8 +900,17 @@ export function PCMContent({
           </CardContent>
         </Card>
         <Card
-          className="hover:bg-muted/50 transition-colors cursor-pointer"
+          className="hover:bg-muted/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => router.push("/profile")}
+          role="link"
+          tabIndex={0}
+          aria-label="View profile"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              router.push("/profile");
+            }
+          }}
         >
           <CardContent className="p-6 flex flex-col items-center justify-center gap-3 text-center">
             <div className="p-3 bg-purple-100 text-purple-600 rounded-full dark:bg-purple-900/20 dark:text-purple-400">

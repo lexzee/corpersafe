@@ -1,6 +1,7 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { createClient } from "./supabase/client";
+import { toast } from "./toast";
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -32,19 +33,23 @@ export function timeAgo(dateString: string) {
 
 export const runSafetyCheck = async (
   silent = false,
-  enableAudio: () => void,
-  setLoading: (value: React.SetStateAction<boolean>) => void,
-  setTrips: (value: React.SetStateAction<any[]>) => void,
+  enableAudio?: () => void,
+  setLoading?: (value: React.SetStateAction<boolean>) => void,
+  setTrips?: (value: React.SetStateAction<any[]>) => void,
+  notify?: (message: string, kind?: "info" | "success" | "warning" | "error") => void,
 ) => {
   const supabase = createClient();
-  enableAudio();
-  if (!silent) setLoading(true);
+  enableAudio?.();
+  if (!silent) setLoading?.(true);
   const { data, error } = await supabase.rpc("check_signal_loss");
 
   if (!silent) {
     if (error) {
       console.error("Safety Check Failed:", error);
-      alert("Check Failed, Check Console.");
+      notify?.(
+        "Safety check failed — check the browser console for details.",
+        "error",
+      );
     } else {
       const { newly_flagged, total_danger } = data as {
         newly_flagged: number;
@@ -52,15 +57,17 @@ export const runSafetyCheck = async (
       };
 
       if (newly_flagged > 0) {
-        alert(
-          `⚠️ WARNING: ${newly_flagged} new signals lost! Total Danger: ${total_danger}`,
+        notify?.(
+          `${newly_flagged} new signal${newly_flagged > 1 ? "s" : ""} lost. Trips currently in danger: ${total_danger}.`,
+          "error",
         );
       } else if (total_danger > 0) {
-        alert(
-          `ℹ️ Scan Complete. No NEW lost signals.\n\nHowever. ${total_danger} trips are currently in DANGER sate.`,
+        notify?.(
+          `Scan complete — no NEW lost signals.\n${total_danger} trip${total_danger > 1 ? "s are" : " is"} still in danger.`,
+          "warning",
         );
       } else {
-        alert("✅ Scan Complete: All signals are fresh.");
+        notify?.("Scan complete — all signals are fresh.", "success");
       }
     }
   }
@@ -71,13 +78,13 @@ export const runSafetyCheck = async (
     .select("*, profiles(full_name, phone, next_of_kin)")
     .neq("status", "completed")
     .neq("status", "resolved");
-  if (newData) setTrips(newData);
-  setLoading(false);
+  if (newData) setTrips?.(newData);
+  setLoading?.(false);
 };
 
 export const copyCode = (tracking_code: string) => {
   navigator.clipboard.writeText(tracking_code);
-  alert("Tracking code copied!");
+  toast("Tracking code copied!", "success");
 };
 
 export const shareCode = async (tracking_code: string) => {
@@ -92,7 +99,7 @@ export const shareCode = async (tracking_code: string) => {
         url,
       });
     } catch (err) {
-      console.log("Share cancelled");
+      // Share cancelled — no action needed
     }
   } else {
     // Fallback

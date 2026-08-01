@@ -32,7 +32,16 @@ export function AdminSidebar({
       <div
         key={trip.id}
         onClick={() => setSelectedTrip(trip)}
-        className={`p-4 rounded-xl border cursor-pointer transition-all mb-2 relative overflow-hidden ${
+        role="button"
+        tabIndex={0}
+        aria-label={`Trip ${trip.plate_number || trip.tracking_code} — status ${trip.status}`}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            setSelectedTrip(trip);
+          }
+        }}
+        className={`p-4 rounded-xl border cursor-pointer transition-all mb-2 relative overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
           isSelected
             ? "bg-primary/10 border-primary shadow-md ring-1 ring-primary/30"
             : "bg-card border-border hover:border-primary/50"

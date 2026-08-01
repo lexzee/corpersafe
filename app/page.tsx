@@ -375,7 +375,7 @@ export default function Home() {
               {
                 icon: <Radio className="w-8 h-8 text-blue-600" />,
                 title: "Live Tracking",
-                desc: "Rea-time GPS updates. Parents can watch your movement on a map without needing an account.",
+                desc: "Real-time GPS updates. Parents can watch your movement on a map without needing an account.",
               },
               {
                 icon: <BellRing className="w-8 h-8 text-destructive" />,

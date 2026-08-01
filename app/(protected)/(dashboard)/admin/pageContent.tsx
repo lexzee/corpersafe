@@ -314,7 +314,7 @@ export function AdminContent({
 
     // Backup Watchdog
     const watchdogInterval = setInterval(() => {
-      console.log("Client Watchdog: Checking signals...");
+      // Watchdog keeps the dashboard fresh even if realtime drops
       runSafetyCheck(true, enableAudio, setLoading, setTrips);
     }, 120000);
 
@@ -347,8 +347,8 @@ export function AdminContent({
         audioRef.current
           .play()
           .catch((e) =>
-            console.log(
-              "Audio play blocked (user interaction needed first): ",
+            console.warn(
+              "Audio play blocked (user interaction needed first):",
               e,
             ),
           );
