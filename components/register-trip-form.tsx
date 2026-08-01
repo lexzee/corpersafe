@@ -81,6 +81,20 @@ export function RegisterTripForm({
       } = await supabase.auth.getUser();
       if (user) setUser(user);
 
+      // Pre-fill the emergency contact from the profile (captured at signup
+      // or edited in Profile Settings), so it doesn't have to be typed again.
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("next_of_kin, next_of_kin_email")
+          .eq("id", user.id)
+          .single();
+        if (profile) {
+          setNextOfKin(profile.next_of_kin || "");
+          setNextOfKinEmail(profile.next_of_kin_email || "");
+        }
+      }
+
       // Fetch States
       const { data: states } = await supabase
         .from("allowed_states")
@@ -378,24 +392,30 @@ export function RegisterTripForm({
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="nextOfKin">Next of Kin's phone</Label>
+                    <Label htmlFor="nextOfKin">
+                      Next of Kin&apos;s phone (optional)
+                    </Label>
                     <Input
                       id="nextOfKin"
-                      type="text"
+                      type="tel"
                       placeholder="Parent/Guardian's phone"
-                      required
                       value={nextOfKin}
                       onChange={(e) => setNextOfKin(e.target.value)}
                     />
+                    <p className="text-[10px] text-muted-foreground">
+                      Pre-filled from your profile — update here if needed.
+                      They&apos;ll be alerted if you press the panic button.
+                    </p>
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="nextOfKinEmail">Next of Kin's email</Label>
+                    <Label htmlFor="nextOfKinEmail">
+                      Next of Kin&apos;s email (optional)
+                    </Label>
                     <Input
                       id="nextOfKinEmail"
                       type="email"
                       placeholder="parent@example.com"
-                      required
                       value={nextOfKinEmail}
                       onChange={(e) => setNextOfKinEmail(e.target.value)}
                     />

@@ -26,6 +26,8 @@ export function SignUpForm({
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [nextOfKin, setNextOfKin] = useState("");
+  const [nextOfKinEmail, setNextOfKinEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -49,14 +51,22 @@ export function SignUpForm({
         email,
         password,
         options: {
-          // Must go through /auth/confirm so the OTP token is verified;
-          // "next" carries the user's intended destination (e.g. a
-          // tracking link) or falls back to the traveler dashboard.
+          // The confirmation email's link lands on /auth/confirm, which is a
+          // client page: Supabase's default {{ .ConfirmationURL }} template
+          // redirects back with the session in the URL fragment, and the
+          // browser client picks it up automatically. "next" carries the
+          // user's intended destination (e.g. a tracking link) or falls back
+          // to the traveler dashboard.
           emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(nextPath)}`,
           data: {
             full_name: fullName,
             phone: phone,
             role: "pcm",
+            // Persisted to profiles by the on_auth_user_created trigger, so
+            // trip registration can pre-fill the emergency contact instead of
+            // asking for it again.
+            next_of_kin: nextOfKin,
+            next_of_kin_email: nextOfKinEmail,
           },
         },
       });
@@ -109,7 +119,7 @@ export function SignUpForm({
                 <Label htmlFor="fullName">FullName</Label>
                 <Input
                   id="fullName"
-                  type="fullName"
+                  type="text"
                   placeholder="John Doe"
                   required
                   value={fullName}
@@ -120,11 +130,38 @@ export function SignUpForm({
                 <Label htmlFor="phone">Phone</Label>
                 <Input
                   id="phone"
-                  type="phone"
+                  type="tel"
                   placeholder="070 2347 5678"
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="nextOfKin">Next of Kin&apos;s phone (optional)</Label>
+                <Input
+                  id="nextOfKin"
+                  type="tel"
+                  placeholder="Parent/Guardian's phone"
+                  value={nextOfKin}
+                  onChange={(e) => setNextOfKin(e.target.value)}
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  They&apos;ll receive an alert if you press the panic button
+                  while travelling. You can also add this later from your
+                  profile.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="nextOfKinEmail">
+                  Next of Kin&apos;s email (optional)
+                </Label>
+                <Input
+                  id="nextOfKinEmail"
+                  type="email"
+                  placeholder="parent@example.com"
+                  value={nextOfKinEmail}
+                  onChange={(e) => setNextOfKinEmail(e.target.value)}
                 />
               </div>
               <div className="grid gap-2">

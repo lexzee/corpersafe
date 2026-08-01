@@ -59,7 +59,22 @@ Plus the RPC functions `check_signal_loss()` (dead-man's-switch scan) and `gener
 
 Parents track **without accounts**, so the `anon` role needs read access. Apply the migration in [`supabase/migrations/`](supabase/migrations) (SQL Editor or `supabase db push`) — it adds scoped RLS policies and puts `trips` in the realtime publication. See [`supabase/README.md`](supabase/README.md) for details and verification steps.
 
-### 3. Environment variables
+### 3. Auth email links (no dashboard changes needed)
+
+Email confirmation & password-reset emails use Supabase's **default** templates
+(`{{ .ConfirmationURL }}`). Clicking a link goes through Supabase's hosted
+verify endpoint, which redirects back to the app with the session in the URL
+*fragment*; [`/auth/confirm`](app/auth/confirm) is a client page that picks it
+up automatically (a server route can never see URL fragments).
+
+Customised templates that link straight to the app also work — the page accepts
+`?token_hash=...&type=...` (e.g.
+`{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup`) and PKCE
+`?code=...` query params. Just keep `{{ .ConfirmationURL }}` (or point the
+template at `/auth/confirm` with the params above) and add your app URL to
+**Authentication → URL Configuration → Redirect URLs** in the dashboard.
+
+### 4. Environment variables
 
 Copy `.env.example` → `.env.local`:
 
@@ -70,14 +85,14 @@ Copy `.env.example` → `.env.local`:
 | `NEXT_PUBLIC_EMAILJS_SERVICE_ID` / `_TEMPLATE_ID` / `_PUBLIC_KEY` | EmailJS credentials for SOS emails (all **must** be `NEXT_PUBLIC_` — they run in the browser) |
 | `NEXT_PUBLIC_EMAILJS_REPLY_TO` | *(optional)* reply-to shown in SOS emails |
 
-### 4. Run
+### 5. Run
 
 ```bash
 npm ci
 npm run dev    # http://localhost:3000
 ```
 
-### 5. Make someone an admin
+### 6. Make someone an admin
 
 ```sql
 update public.profiles set role = 'state_admin', jurisdiction = 'Lagos'
