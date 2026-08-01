@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { CopyButton, ShareButton, ViewHistoryButton } from "./buttons";
+import { LogoutButton } from "./logout-button";
 import { Input } from "./ui/input";
 
 export const TripStatus = ({
@@ -76,6 +77,10 @@ export const TripPending = ({
 }) => {
   return (
     <div className="min-h-screen bg-muted/30 flex flex-col items-center justify-center p-6 text-center">
+      {/* Log out straight from the pending-trip screen */}
+      <div className="absolute top-4 right-4">
+        <LogoutButton />
+      </div>
       <div className="bg-card p-8 rounded-2xl shadow-xl max-w-sm w-full border border-border">
         <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
           <Car size={40} className="text-primary" />

@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import { getDistanceFromLatLonInKm, updateStatus } from "@/lib/utils";
+import { geocodeDestination } from "@/lib/geo";
 import {
   clearQueue,
   enqueuePoint,
@@ -143,6 +144,32 @@ function TrackingView({
   const [toast, setToast] = useState<any>(null);
   const wakeLockRef = useRef<any>(null);
   const syncFailCountRef = useRef(0);
+
+  // Planned destination point (precise geocode of the camp when available,
+  // else the destination state's centroid) — used to mark the destination,
+  // draw the route and measure the remaining distance.
+  const [destCoords, setDestCoords] = useState<[number, number] | null>(null);
+  useEffect(() => {
+    let active = true;
+    void geocodeDestination(trip).then((point) => {
+      if (active) setDestCoords(point);
+    });
+    return () => {
+      active = false;
+    };
+    // Geocode is cached per camp; deps key on the fields that change it.
+  }, [trip?.id, trip?.destination_state, trip?.destination_camp]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Straight-line distance from the latest GPS fix to the destination.
+  const distanceToDestination =
+    destCoords && hasFix
+      ? getDistanceFromLatLonInKm(
+          currentLoc[0],
+          currentLoc[1],
+          destCoords[0],
+          destCoords[1],
+        )
+      : null;
 
   const dismissToast = useCallback(() => setToast(null), []);
   const showToast = useCallback(
@@ -634,13 +661,24 @@ function TrackingView({
               </CardTitle>
             </CardHeader>
 
-            <CardContent className="flex items-end gap-1 pb-4">
-              <span className="text-4xl font-black font-mono tracking-tighter">
-                {speed}
-              </span>
-              <span className="text-sm font-bold mb-1.5 text-muted-foreground">
-                km/h
-              </span>
+            <CardContent className="pb-4">
+              <div className="flex items-end gap-1">
+                <span className="text-4xl font-black font-mono tracking-tighter">
+                  {speed}
+                </span>
+                <span className="text-sm font-bold mb-1.5 text-muted-foreground">
+                  km/h
+                </span>
+              </div>
+              <div className="text-xs text-muted-foreground mt-1.5">
+                {distanceToDestination != null
+                  ? `${distanceToDestination.toFixed(1)} km to ${
+                      trip.destination_camp || "camp"
+                    }`
+                  : destCoords
+                    ? "Waiting for GPS to measure the distance…"
+                    : "Destination route unavailable"}
+              </div>
             </CardContent>
           </Card>
 
@@ -676,6 +714,8 @@ function TrackingView({
             speed={speed}
             trip={trip}
             hasFix={hasFix}
+            destination={destCoords}
+            routeFrom={hasFix ? currentLoc : null}
           />
         </div>
 

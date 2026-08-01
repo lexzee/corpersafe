@@ -40,6 +40,21 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
+  // Logged-in users never see the public landing page — straight to their
+  // dashboard. PCMs (the signup default) go to /pcm; DB-only admins whose
+  // JWT still says "pcm" get bounced to /admin by the /pcm page's own
+  // server-side check, so defaulting to /pcm here is always safe.
+  if (request.nextUrl.pathname === "/" && user) {
+    const role = user?.user_metadata?.role;
+    const isAdmin =
+      typeof role === "string" &&
+      ["admin", "super_admin", "state_admin", "school_admin"].includes(role);
+    const url = request.nextUrl.clone();
+    url.pathname = isAdmin ? "/admin" : "/pcm";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
   if (
     request.nextUrl.pathname !== "/" &&
     !user &&

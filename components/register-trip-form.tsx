@@ -37,6 +37,7 @@ import {
 } from "./ui/combobox";
 import { InputGroupAddon } from "./ui/input-group";
 import { createClient } from "@/lib/supabase/client";
+import { geocodeCamp } from "@/lib/geo";
 import { useRouter } from "next/navigation";
 
 // allowed_states rows: the camp's host state + its display name
@@ -80,6 +81,20 @@ export function RegisterTripForm({
         data: { user },
       } = await supabase.auth.getUser();
       if (user) setUser(user);
+
+      // Pre-fill the emergency contact from the profile (captured at signup
+      // or edited in Profile Settings), so it doesn't have to be typed again.
+      if (user) {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("next_of_kin, next_of_kin_email")
+          .eq("id", user.id)
+          .single();
+        if (profile) {
+          setNextOfKin(profile.next_of_kin || "");
+          setNextOfKinEmail(profile.next_of_kin_email || "");
+        }
+      }
 
       // Fetch States
       const { data: states } = await supabase
@@ -213,8 +228,24 @@ export function RegisterTripForm({
 
       const trackingCode = "NYSC-" + Math.floor(10000 + Math.random() * 90000);
 
-      // Leave coordinates null when there is no GPS fix — fabricating a
-      // position (e.g. the centre of Nigeria) misleads parents and admins
+      // Pin the CAMP (allowed_states.campName), not the state: one free
+      // Nominatim geocode at registration stores the precise destination
+      // coordinates on the trip, so every dashboard (traveler, parents'
+      // tracker, Mission Control) can mark it without another lookup. If the
+      // geocode fails (offline etc.) the maps fall back to the state
+      // centroid at render time.
+      let destinationLat: number | null = null;
+      let destinationLng: number | null = null;
+      if (destination?.campName) {
+        const coords = await geocodeCamp(destination.campName, destination.state);
+        if (coords) {
+          destinationLat = coords[0];
+          destinationLng = coords[1];
+        }
+      }
+
+      // Leave current coordinates null when there is no GPS fix — fabricating
+      // a position (e.g. the centre of Nigeria) misleads parents and admins
       // watching the map. The trip starts broadcasting real coordinates
       // from the device once the journey begins.
       const { error: tripError } = await supabase.from("trips").insert({
@@ -223,6 +254,8 @@ export function RegisterTripForm({
         origin,
         destination_state: destination?.state || "",
         destination_camp: destination?.campName || "",
+        destination_lat: destinationLat,
+        destination_lng: destinationLng,
         institution,
         status: "pending",
         tracking_code: trackingCode,
@@ -378,24 +411,30 @@ export function RegisterTripForm({
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="nextOfKin">Next of Kin's phone</Label>
+                    <Label htmlFor="nextOfKin">
+                      Next of Kin&apos;s phone (optional)
+                    </Label>
                     <Input
                       id="nextOfKin"
-                      type="text"
+                      type="tel"
                       placeholder="Parent/Guardian's phone"
-                      required
                       value={nextOfKin}
                       onChange={(e) => setNextOfKin(e.target.value)}
                     />
+                    <p className="text-[10px] text-muted-foreground">
+                      Pre-filled from your profile — update here if needed.
+                      They&apos;ll be alerted if you press the panic button.
+                    </p>
                   </div>
 
                   <div className="grid gap-2">
-                    <Label htmlFor="nextOfKinEmail">Next of Kin's email</Label>
+                    <Label htmlFor="nextOfKinEmail">
+                      Next of Kin&apos;s email (optional)
+                    </Label>
                     <Input
                       id="nextOfKinEmail"
                       type="email"
                       placeholder="parent@example.com"
-                      required
                       value={nextOfKinEmail}
                       onChange={(e) => setNextOfKinEmail(e.target.value)}
                     />

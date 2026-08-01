@@ -13,7 +13,7 @@ import {
 } from "./buttons";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "@/lib/toast";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function UserNavbar({
   status,
@@ -78,10 +78,50 @@ export function AdminNavbar({
   setTrips,
   user,
   profile,
+  trips,
 }: any) {
   const supabase = createClient();
   const [demoArmed, setDemoArmed] = useState(false);
   const demoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Whether fake demo trips currently exist (so the button toggles between
+  // "Simulate" and "Stop Demo") and how many there are.
+  const [demoActive, setDemoActive] = useState(false);
+  const [demoCount, setDemoCount] = useState(0);
+
+  // Demo fingerprint used by generate_demo_traffic() (kept in sync with
+  // supabase/migrations/…demo_trips_cleanup.sql). The Stop Demo button can
+  // only remove trips matching this pattern — real journeys are never at risk.
+  const DEMO_FINGERPRINT =
+    "plate_number.ilike.DEMO%,origin.ilike.%demo%,institution.ilike.%demo%";
+
+  // Detect demo trips from the DB so the button reflects reality:
+  //   1. is_demo flag (migration 20260802000003 applied) — authoritative.
+  //   2. if the flag column doesn't exist yet (migration not applied), the
+  //      combined query errors and we fall back to the fingerprint match.
+  const checkDemoTrips = useCallback(async () => {
+    const demoFilter = `is_demo.eq.true,${DEMO_FINGERPRINT}`;
+    const { data } = await supabase.from("trips").select("id").or(demoFilter);
+    if (data == null) {
+      // Column missing → retry with the fingerprint only
+      const { data: fallback } = await supabase
+        .from("trips")
+        .select("id")
+        .or(DEMO_FINGERPRINT);
+      const count = fallback?.length ?? 0;
+      setDemoCount(count);
+      setDemoActive(count > 0);
+      return;
+    }
+    const count = data.length;
+    setDemoCount(count);
+    setDemoActive(count > 0);
+  }, [supabase]);
+
+  // Re-check whenever the trip list changes (realtime, generation, deletion)
+  // so the button toggles to "Stop Demo" the moment fake trips appear.
+  useEffect(() => {
+    void checkDemoTrips();
+  }, [checkDemoTrips, trips]);
 
   useEffect(() => {
     return () => {
@@ -95,8 +135,27 @@ export function AdminNavbar({
   const handleSafetyCheck = () =>
     runSafetyCheck?.(false, () => {}, setLoading, setTrips, toast);
 
-  // Two-phase demo trigger instead of confirm()
+  // Two-phase trigger (instead of confirm()) for BOTH actions: the button is
+  // "Simulate" when no demo trips exist and "Stop Demo" when they do.
   const handleDemoClick = () => {
+    if (demoActive) {
+      if (!demoArmed) {
+        setDemoArmed(true);
+        toast(
+          demoCount > 0
+            ? `Demo mode is on (${demoCount} fake trip${demoCount > 1 ? "s" : ""}). Tap Stop Demo again to remove them.`
+            : "Demo mode is on. Tap Stop Demo again to remove the fake trips.",
+          "warning",
+        );
+        demoTimer.current = setTimeout(() => setDemoArmed(false), 5000);
+        return;
+      }
+      if (demoTimer.current) clearTimeout(demoTimer.current);
+      setDemoArmed(false);
+      void stopDemo();
+      return;
+    }
+
     if (!demoArmed) {
       setDemoArmed(true);
       toast(
@@ -121,6 +180,16 @@ export function AdminNavbar({
       toast("Error generating demo data.", "error");
     } else {
       toast("Demo traffic generated — check the map.", "success");
+      // Flag the freshly created trips so Stop Demo can remove exactly
+      // these. Match on the demo fingerprint AND a recent created_at window
+      // (belt-and-braces: even if the generator's rows don't match the
+      // fingerprint, the ones just created are still marked is_demo).
+      const since = new Date(Date.now() - 60_000).toISOString();
+      await supabase
+        .from("trips")
+        .update({ is_demo: true })
+        .or(DEMO_FINGERPRINT)
+        .gte("created_at", since);
       // Trigger refetch
       const { data } = await supabase
         .from("trips")
@@ -128,7 +197,71 @@ export function AdminNavbar({
         .neq("status", "completed")
         .neq("status", "resolved");
       if (data) setTrips(data);
+      // Re-sync the button state from the DB (the trips-prop effect also
+      // does this, but do it here so the label flips immediately).
+      await checkDemoTrips();
     }
+    setLoading(false);
+  };
+
+  // Stop demo + delete the fake trips (and their GPS/audit rows) without
+  // touching the Supabase dashboard. Prefers the SECURITY DEFINER RPC from
+  // the migration (RLS has no delete policy on trips); falls back to direct
+  // client deletes if the migration hasn't been applied yet.
+  const stopDemo = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.rpc("delete_demo_traffic");
+
+    if (error || data == null) {
+      console.warn("delete_demo_traffic RPC unavailable:", error);
+      try {
+        // is_demo-aware, same fallback chain as checkDemoTrips
+        const demoFilter = `is_demo.eq.true,${DEMO_FINGERPRINT}`;
+        const { data: demo } = await supabase
+          .from("trips")
+          .select("id")
+          .or(demoFilter);
+        const demoRows = demo ?? (await supabase.from("trips").select("id").or(DEMO_FINGERPRINT)).data;
+        const ids = (demoRows || []).map((t) => t.id);
+        for (const id of ids) {
+          await supabase.from("trip_logs").delete().eq("trip_id", id);
+          await supabase.from("alert_logs").delete().eq("trip_id", id);
+          await supabase.from("trips").delete().eq("id", id);
+        }
+        toast(
+          ids.length > 0
+            ? `Demo stopped — ${ids.length} fake trip${ids.length > 1 ? "s" : ""} removed.`
+            : "No demo trips found.",
+          ids.length > 0 ? "success" : "info",
+        );
+        setDemoActive(false);
+        setDemoCount(0);
+      } catch (e) {
+        console.error("Demo cleanup failed:", e);
+        toast(
+          "Could not remove demo trips — the DB migration may be missing.",
+          "error",
+        );
+      }
+    } else {
+      const removed = Number(data) || 0;
+      toast(
+        removed > 0
+          ? `Demo stopped — ${removed} fake trip${removed > 1 ? "s" : ""} removed.`
+          : "No demo trips found.",
+        removed > 0 ? "success" : "info",
+      );
+      setDemoActive(false);
+      setDemoCount(0);
+    }
+
+    // Refresh the trip list either way
+    const { data: trips } = await supabase
+      .from("trips")
+      .select("*, profiles(full_name, phone, next_of_kin)")
+      .neq("status", "completed")
+      .neq("status", "resolved");
+    if (trips) setTrips(trips);
     setLoading(false);
   };
 
@@ -154,8 +287,13 @@ export function AdminNavbar({
         {/* Mute Button */}
         <MuteButton isMuted={isMuted} setIsMuted={setIsMuted} />
 
-        {/* DEMO BUTTON */}
-        <DemoButton generateDemoData={handleDemoClick} armed={demoArmed} />
+        {/* DEMO BUTTON — Simulate ⇄ Stop Demo (removes the fake trips) */}
+        <DemoButton
+          generateDemoData={handleDemoClick}
+          armed={demoArmed}
+          demoActive={demoActive}
+          onStopDemo={handleDemoClick}
+        />
 
         {/* Safety Check Button */}
         <SafetyCheckButton

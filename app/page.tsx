@@ -43,13 +43,20 @@ export default function Home() {
       if (!user) return;
       setUser(user);
 
-      // Admins don't get the public landing page — straight to Mission Control
+      // Logged-in users get sent to their dashboard, never the landing page.
+      // Admins don't get the public landing page either — straight to Mission
+      // Control. (The middleware does this on the server; this is the
+      // client-side fallback for cached/soft-navigated renders.)
       const { data: profile } = await supabase
         .from("profiles")
         .select("role")
         .eq("id", user.id)
         .single();
-      if (isAdminRole(profile?.role)) redirect.replace("/admin");
+      if (!profile || !isAdminRole(profile?.role)) {
+        redirect.replace("/pcm");
+        return;
+      }
+      redirect.replace("/admin");
     };
 
     fetchUser();
