@@ -72,6 +72,9 @@ supabase db push
    `allowed_institutions.name`). `state_admin` jurisdictions must match a
    `allowed_states.state` value; `school_admin` must match an
    `allowed_institutions.name`.
+5. Admin dashboard shows traveler name/phone/Emergency Kin as `N/A`/empty →
+   admins have no SELECT policy on `profiles`; run
+   `20260802000002_admin_read_profiles.sql` (recursion-safe via `is_admin()`).
 4. If the migration itself fails with
    `42804: column "role" is of type user_role but expression is of type text`,
    make sure you're running the latest version of the script (it routes every

@@ -54,9 +54,29 @@ const TripDetails = ({
         </div>
         <div className="flex justify-between py-2 border-b border-border">
           <span className="text-muted-foreground">Emergency Kin</span>
-          <span className="font-medium text-foreground">
-            {selectedTrip.profiles?.next_of_kin || "N/A"}
-          </span>
+          {selectedTrip.profiles?.next_of_kin ? (
+            <a
+              href={`tel:${selectedTrip.profiles.next_of_kin}`}
+              className="text-primary font-medium hover:underline"
+            >
+              {selectedTrip.profiles.next_of_kin}
+            </a>
+          ) : (
+            <span className="font-medium text-foreground">N/A</span>
+          )}
+        </div>
+        <div className="flex justify-between py-2 border-b border-border">
+          <span className="text-muted-foreground">Kin Email</span>
+          {selectedTrip.profiles?.next_of_kin_email ? (
+            <a
+              href={`mailto:${selectedTrip.profiles.next_of_kin_email}`}
+              className="text-primary font-medium hover:underline break-all text-right"
+            >
+              {selectedTrip.profiles.next_of_kin_email}
+            </a>
+          ) : (
+            <span className="font-medium text-foreground">N/A</span>
+          )}
         </div>
 
         {/* Signal Status */}

@@ -42,8 +42,8 @@ import { useRouter } from "next/navigation";
 // allowed_states rows: the camp's host state + its display name
 type StateOption = { state: string; campName: string };
 // Base UI needs to know how to render the selected object into the input —
-// without this it stringifies the object ("[object Object]")
-const stateToInputText = (item: StateOption | null) => item?.state ?? "";
+// without itemToStringLabel it stringifies the object ("[object Object]")
+const stateToInputText = (item: StateOption) => item.state;
 
 export function RegisterTripForm({
   className,
@@ -323,6 +323,7 @@ export function RegisterTripForm({
                     <Combobox
                       items={stateList}
                       autoHighlight
+                      itemToStringLabel={stateToInputText}
                       itemToStringValue={stateToInputText}
                       onValueChange={(e: StateOption | null) => {
                         setDestination(e);

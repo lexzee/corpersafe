@@ -186,6 +186,9 @@ export function AdminContent({
   const [unauthorized, setUnauthorized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
+  // Watchdog: if auth/data hangs (dead realtime socket, stuck lock),
+  // surface a recovery option instead of an infinite spinner
+  const [slowLoad, setSlowLoad] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
   const [isMuted, setIsMuted] = useState(false);
@@ -228,13 +231,19 @@ export function AdminContent({
       setAuthLoading(false);
     };
     fetchUser();
-  }, []);
+  }, [supabase]);
+
   useEffect(() => {
+    // CRITICAL: `user` starts null on mount — the dep array must include it
+    // or this effect runs once against null and the profile (and therefore
+    // the whole portal) never loads after a fresh sign-in.
+    if (!user) return;
+
     const fetchProfile = async () => {
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
-        .eq("id", user?.id)
+        .eq("id", user.id)
         .single();
       if (error) {
         console.error(error.message);
@@ -244,8 +253,8 @@ export function AdminContent({
       }
     };
 
-    if (user) fetchProfile();
-  }, []);
+    fetchProfile();
+  }, [user, supabase, router]);
 
   //   2. Load Data
   useEffect(() => {
@@ -268,7 +277,7 @@ export function AdminContent({
 
       const { data, error } = await supabase
         .from("trips")
-        .select("*, profiles(full_name, phone, next_of_kin)")
+        .select("*, profiles(full_name, phone, next_of_kin, next_of_kin_email)")
         .neq("status", "completed")
         // Incidents closed via the monitor view become history
         .neq("status", "resolved");
@@ -324,6 +333,12 @@ export function AdminContent({
       }
     };
   }, [user, profile]);
+
+  useEffect(() => {
+    if (!loading && !authLoading) return;
+    const t = setTimeout(() => setSlowLoad(true), 12000);
+    return () => clearTimeout(t);
+  }, [loading, authLoading]);
 
   //   3. Search Logic
   const displayTrips = trips.filter(
@@ -391,11 +406,30 @@ export function AdminContent({
 
   if (loading || authLoading)
     return (
-      <div className="flex h-screen items-center justify-center gap-2 bg-background">
-        <Loader2 className="animate-spin text-primary" />
-        <span className="font-bold text-muted-foreground">
-          Loading Secure Portal...
-        </span>
+      <div className="flex h-screen flex-col items-center justify-center gap-4 bg-background">
+        <div className="flex items-center gap-2">
+          <Loader2 className="animate-spin text-primary" />
+          <span className="font-bold text-muted-foreground">
+            Loading Secure Portal...
+          </span>
+        </div>
+        {slowLoad && (
+          <div className="flex flex-col items-center gap-3 text-center px-6 animate-in fade-in">
+            <p className="text-sm text-muted-foreground max-w-xs">
+              Taking longer than usual — the connection may have stalled.
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => window.location.reload()}
+              >
+                Reload page
+              </Button>
+              <LogoutButton />
+            </div>
+          </div>
+        )}
       </div>
     );
 
