@@ -53,9 +53,12 @@ function TrackingView({
   const [starting, setStarting] = useState(false);
   const [speed, setSpeed] = useState(0);
   const [gpsAccuracy, setGpsAccuracy] = useState(0);
+  // Viewport default only (centre of Nigeria). The map marker is gated by
+  // hasFix so we never plot a fabricated position.
   const [currentLoc, setCurrentLoc] = useState<[number, number]>([
-    0.343234, 0.243244,
+    9.082, 8.6753,
   ]);
+  const [hasFix, setHasFix] = useState(false);
 
   // Refs for Auto-Stop Logic
   const lastPosRef = useRef<{ lat: number; lng: number; time: number } | null>(
@@ -69,8 +72,9 @@ function TrackingView({
 
   // Initialize location from trip data if available
   useEffect(() => {
-    if (trip?.current_lat) {
+    if (trip?.current_lat != null && trip?.current_lng != null) {
       setCurrentLoc([trip.current_lat, trip.current_lng]);
+      setHasFix(true);
     }
   }, []);
 
@@ -95,6 +99,7 @@ function TrackingView({
         const now = Date.now();
 
         setCurrentLoc([latitude, longitude]);
+        setHasFix(true);
         setGpsAccuracy(accuracy);
 
         // --- A. Calculate Speed (km/h) ---
@@ -202,26 +207,44 @@ function TrackingView({
     setStarting(true);
 
     try {
-      navigator.geolocation.getCurrentPosition(async (pos) => {
-        const { latitude, longitude } = pos.coords;
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          const { latitude, longitude } = pos.coords;
 
-        const { error } = await supabase
-          .from("trips")
-          .update({
+          const { error } = await supabase
+            .from("trips")
+            .update({
+              status: "active",
+              current_lat: latitude,
+              current_lng: longitude,
+              last_updated: new Date().toISOString(),
+            })
+            .eq("id", trip.id);
+
+          if (error) throw error;
+
+          // Reflect the fix locally so the UI immediately knows the real
+          // position (the trip row previously had null coordinates if the
+          // user skipped GPS detection during registration).
+          setCurrentLoc([latitude, longitude]);
+          setHasFix(true);
+          setTrip((prev: any) => ({
+            ...prev,
             status: "active",
             current_lat: latitude,
             current_lng: longitude,
-            last_updated: new Date().toISOString(),
-          })
-          .eq("id", trip.id);
-
-        if (error) throw error;
-
-        setTrip((prev: any) => ({ ...prev, status: "active" }));
-      });
+          }));
+          setStarting(false);
+        },
+        (err) => {
+          console.error("Start trip GPS error:", err);
+          alert("Could not start trip. Check GPS permissions.");
+          setStarting(false);
+        },
+        { enableHighAccuracy: true, timeout: 15000 },
+      );
     } catch (e) {
       alert("Could not start trip. Check GPS permissions.");
-    } finally {
       setStarting(false);
     }
   };
@@ -260,7 +283,7 @@ function TrackingView({
         </Button>
       </div>
 
-      <UserNavbar status="" currentLoc={currentLoc} />
+      <UserNavbar status={trip.status} currentLoc={currentLoc} hasFix={hasFix} />
 
       <div className="max-w-md mx-auto p-4 space-y-4">
         <TripStatus trip={trip} setShowPauseModal={setShowPauseModal} />
@@ -314,7 +337,12 @@ function TrackingView({
 
         {/* Map */}
         <div className="h-64 bg-card rounded-2xl overflow-hidden border border-border shadow-sm relative z-0">
-          <UserMapView currentLoc={currentLoc} speed={speed} trip={trip} />
+          <UserMapView
+            currentLoc={currentLoc}
+            speed={speed}
+            trip={trip}
+            hasFix={hasFix}
+          />
         </div>
 
         {/* Buttons */}

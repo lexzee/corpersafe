@@ -12,6 +12,7 @@ import {
   AlertTriangle,
   CheckCircle,
   ArrowLeft,
+  MapPin,
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { useSearchParams } from "next/navigation";
@@ -42,7 +43,7 @@ export default function TrackPageContent({
   const [trip, setTrip] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   useEffect(() => {
     if (urlCode) handleTrack(urlCode);
@@ -67,7 +68,8 @@ export default function TrackPageContent({
       if (error) throw error;
       if (!data) throw new Error("Tracking ID not found or trip has ended.");
       setTrip(data);
-      setLastUpdate(new Date(data.last_updated));
+      // last_updated is null until the traveler starts broadcasting GPS
+      setLastUpdate(data.last_updated ? new Date(data.last_updated) : null);
     } catch (err: any) {
       setError("Tracking ID not found or trip has ended.");
     } finally {
@@ -93,7 +95,9 @@ export default function TrackPageContent({
         (payload) => {
           console.log("Live Update:", payload.new);
           setTrip((prev: any) => ({ ...prev, ...payload.new }));
-          setLastUpdate(new Date(payload.new.last_updated));
+          setLastUpdate(
+            payload.new.last_updated ? new Date(payload.new.last_updated) : null,
+          );
         },
       )
       .subscribe((status) => {
@@ -193,8 +197,10 @@ export default function TrackPageContent({
                     {trip.status}
                   </h2>
                   <p className="text-xs opacity-90 flex items-center gap-1">
-                    <Clock size={12} /> Last updated:{" "}
-                    {lastUpdate.toLocaleTimeString()}
+                    <Clock size={12} />
+                    {lastUpdate
+                      ? `Last updated: ${lastUpdate.toLocaleTimeString()}`
+                      : "Awaiting first location update"}
                   </p>
 
                   {/* Pause Reason */}
@@ -207,9 +213,25 @@ export default function TrackPageContent({
               </div>
             </div>
 
-            {/* Map View */}
+            {/* Map View — the traveler may not have a GPS fix yet */}
             <div className="bg-card p-1 rounded-2xl shadow-sm border border-border h-80 z-0 relative">
-              <TrackingMap lat={trip.current_lat} lng={trip.current_lng} />
+              {trip.current_lat != null && trip.current_lng != null ? (
+                <TrackingMap lat={trip.current_lat} lng={trip.current_lng} />
+              ) : (
+                <div className="h-full w-full flex flex-col items-center justify-center gap-3 rounded-xl bg-muted/40 text-center p-6">
+                  <MapPin size={32} className="text-muted-foreground" />
+                  <div>
+                    <p className="font-bold text-foreground">
+                      No live location yet
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      The traveler hasn&apos;t started sharing their GPS
+                      location. The map will appear here once the journey
+                      begins.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Details Card */}

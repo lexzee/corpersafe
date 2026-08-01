@@ -47,7 +47,9 @@ export function SignUpForm({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/protected`,
+          // Must go through /auth/confirm so the OTP token is verified;
+          // "/protected" is a route group, not a real URL (it 404s).
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/pcm`,
           data: {
             full_name: fullName,
             phone: phone,

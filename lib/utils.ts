@@ -73,12 +73,15 @@ export const copyCode = (tracking_code: string) => {
 };
 
 export const shareCode = async (tracking_code: string) => {
+  // Include the code in the URL so the recipient opens the live map
+  // directly instead of having to type the code manually.
+  const url = `${window.location.origin}/track?code=${encodeURIComponent(tracking_code)}`;
   if (navigator.share) {
     try {
       await navigator.share({
         title: "Track my NYSC Journey",
-        text: `I'm on my way to camp. Track me here: ${tracking_code}`,
-        url: window.location.origin + "/track",
+        text: `I'm on my way to camp. Track my journey live: ${url}`,
+        url,
       });
     } catch (err) {
       console.log("Share cancelled");

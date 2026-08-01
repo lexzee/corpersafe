@@ -110,12 +110,17 @@ const TripDetails = ({
           </strong>
           <p className="mt-1 space-y-2">
             <span>
-              Coordinates: {selectedTrip.current_lat.toFixed(5)},{" "}
-              {selectedTrip.current_lng.toFixed(5)}
+              Coordinates:{" "}
+              {selectedTrip.current_lat != null &&
+              selectedTrip.current_lng != null
+                ? `${selectedTrip.current_lat.toFixed(5)}, ${selectedTrip.current_lng.toFixed(5)}`
+                : "No GPS fix yet"}
             </span>
             <span>
               Coordinate timestamp:{" "}
-              {new Date(selectedTrip.last_updated).toLocaleTimeString()}
+              {selectedTrip.last_updated
+                ? new Date(selectedTrip.last_updated).toLocaleTimeString()
+                : "—"}
             </span>
           </p>
         </div>

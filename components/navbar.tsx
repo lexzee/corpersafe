@@ -16,9 +16,11 @@ import { createClient } from "@/lib/supabase/client";
 export function UserNavbar({
   status,
   currentLoc,
+  hasFix = true,
 }: {
   status: string;
   currentLoc: number[];
+  hasFix?: boolean;
 }) {
   const router = useRouter();
   return (
@@ -34,7 +36,9 @@ export function UserNavbar({
           <div>
             <h1 className="font-bold text-sm">Monitoring</h1>
             <p className="text-[10px] text-primary-foreground/80">
-              GPS: {currentLoc[0].toFixed(4)}, {currentLoc[1].toFixed(4)}
+              {hasFix
+                ? `GPS: ${currentLoc[0].toFixed(4)}, ${currentLoc[1].toFixed(4)}`
+                : "Acquiring GPS…"}
             </p>
           </div>
         </div>

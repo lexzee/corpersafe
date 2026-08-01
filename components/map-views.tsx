@@ -7,7 +7,7 @@ import icon from "leaflet/dist/images/marker-icon.png";
 import iconShadow from "leaflet/dist/images/marker-shadow.png";
 import L from "leaflet";
 import { useEffect } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import TripDetails from "./trip-details";
 import { useTheme } from "next-themes";
 
@@ -118,14 +118,14 @@ export function AdminMapView({
     </div>
   );
 }
-export function UserMapView({ currentLoc, speed, trip }: any) {
+export function UserMapView({ currentLoc, speed, trip, hasFix = true }: any) {
   const { resolvedTheme } = useTheme();
 
   return (
     <div className="h-full w-full relative">
       <MapContainer
         center={currentLoc}
-        zoom={13}
+        zoom={hasFix ? 13 : 6}
         scrollWheelZoom={false}
         className="h-full w-full"
       >
@@ -138,11 +138,22 @@ export function UserMapView({ currentLoc, speed, trip }: any) {
           }
           attribution="&copy; OpenStreetMap"
         />
-        <Marker position={currentLoc} icon={DefaultIcon}>
-          <Popup>You are here, Speed: {speed} km/h</Popup>
-        </Marker>
-        <MapUpdater center={currentLoc} />
+        {/* Only plot a marker for a genuine GPS fix — never a fallback */}
+        {hasFix && (
+          <Marker position={currentLoc} icon={DefaultIcon}>
+            <Popup>You are here, Speed: {speed} km/h</Popup>
+          </Marker>
+        )}
+        {hasFix && <MapUpdater center={currentLoc} />}
       </MapContainer>
+      {!hasFix && (
+        <div className="absolute inset-0 z-[500] flex items-center justify-center bg-background/60 backdrop-blur-sm rounded-xl">
+          <p className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+            <Loader2 size={16} className="animate-spin" />
+            Acquiring GPS signal…
+          </p>
+        </div>
+      )}
       {trip.status === "paused" && (
         <div className="absolute top-2 left-2 right-2 bg-amber-100/95 backdrop-blur p-2 rounded-lg z-400 border border-amber-200 flex items-center gap-2 text-amber-800 text-xs font-bold shadow-sm animate-in slide-in-from-top">
           <AlertTriangle size={16} />

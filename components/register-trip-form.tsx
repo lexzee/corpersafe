@@ -181,9 +181,11 @@ export function RegisterTripForm({
       if (profileError) console.warn("Profile Update error:", profileError);
 
       const trackingCode = "NYSC-" + Math.floor(10000 + Math.random() * 90000);
-      const initialLat = startCoords?.lat || 9.082;
-      const initialLng = startCoords?.lng || 8.6753;
 
+      // Leave coordinates null when there is no GPS fix — fabricating a
+      // position (e.g. the centre of Nigeria) misleads parents and admins
+      // watching the map. The trip starts broadcasting real coordinates
+      // from the device once the journey begins.
       const { error: tripError } = await supabase.from("trips").insert({
         pcm_id: userId,
         plate_number: "",
@@ -193,8 +195,8 @@ export function RegisterTripForm({
         institution,
         status: "pending",
         tracking_code: trackingCode,
-        current_lat: initialLat,
-        current_lng: initialLng,
+        current_lat: startCoords?.lat ?? null,
+        current_lng: startCoords?.lng ?? null,
       });
       if (tripError) throw tripError;
 

@@ -1,9 +1,9 @@
 import { createClient } from "./supabase/client";
 import emailjs from "@emailjs/browser";
 
-const SERVICE_ID = process.env.NEXT_EMAILJS_SERVICE_ID!;
-const TEMPLATE_ID = process.env.NEXT_EMAILJS_TEMPLATE_ID!;
-const PUBLIC_KEY = process.env.NEXT_EMAILJS_PUBLIC_KEY!;
+const SERVICE_ID = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID;
+const TEMPLATE_ID = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID;
+const PUBLIC_KEY = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY;
 
 export const sendEmergencyEmail = async (
   tripId: string,
@@ -14,6 +14,24 @@ export const sendEmergencyEmail = async (
 ) => {
   console.log(`Sending Email to ${recipientEmail}...`);
   const supabase = createClient();
+
+  // Guard: these run in the browser, so misconfiguration produces an
+  // actionable error instead of a silent EmailJS failure.
+  if (!SERVICE_ID || !TEMPLATE_ID || !PUBLIC_KEY) {
+    const error =
+      "Email service is not configured (missing NEXT_PUBLIC_EMAILJS_* environment variables).";
+    console.error(error);
+
+    await supabase.from("alert_logs").insert({
+      trip_id: tripId,
+      recipient_contact: recipientEmail,
+      message_body: error,
+      status: "failed",
+      provider_id: "emailjs",
+    });
+
+    return { success: false, error };
+  }
 
   try {
     emailjs.init(PUBLIC_KEY);

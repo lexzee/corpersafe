@@ -13,7 +13,7 @@ import {
   Volume2,
   VolumeX,
 } from "lucide-react";
-import { redirect } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export function CopyButton({ code }: { code: string }) {
   return (
@@ -38,10 +38,12 @@ export function ShareButton({ code }: { code: string }) {
 }
 
 export function ViewHistoryButton() {
-  // const router = useRouter();
+  // NOTE: next/navigation's redirect() throws and cannot be used inside
+  // client-side event handlers — use useRouter().push() instead.
+  const router = useRouter();
   return (
     <button
-      onClick={() => redirect("/history")}
+      onClick={() => router.push("/history")}
       className="mt-4 text-muted-foreground text-sm hover:text-foreground"
     >
       View History
@@ -128,9 +130,12 @@ export function SafetyCheckButton({ runSafetyCheck, loading }: any) {
 }
 
 export function ManageStaffButton() {
+  const router = useRouter();
+  // TODO: "/users" does not exist yet — build the staff-management page
+  // before enabling this button in the AdminNavbar.
   return (
     <button
-      onClick={() => redirect("/users")}
+      onClick={() => router.push("/users")}
       className="flex items-center gap-2 px-3 py-2 bg-background text-foreground rounded-lg text-sm font-bold hover:bg-muted border border-border"
       title="Manage Staff"
     >
