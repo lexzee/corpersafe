@@ -660,12 +660,13 @@ export function PCMContent({
       }
       setUser(user);
 
-      // Fetch active trip
+      // Fetch active trip (resolved incidents are closed, like completed)
       const { data } = await supabase
         .from("trips")
         .select("*")
         .eq("pcm_id", user.id)
         .neq("status", "completed")
+        .neq("status", "resolved")
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();

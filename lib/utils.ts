@@ -13,6 +13,13 @@ export function tripIsStale(trip: any) {
   return seconds > 120; // 2 minutes
 }
 
+// Sanitize a post-login redirect target — same-origin paths only, never
+// protocol-relative URLs (prevents open redirects via ?next=evil.com).
+export function safeNextPath(value: string | null | undefined) {
+  if (!value) return null;
+  return value.startsWith("/") && !value.startsWith("//") ? value : null;
+}
+
 export function timeAgo(dateString: string) {
   const seconds = Math.floor(
     (new Date().getTime() - new Date(dateString).getTime()) / 1000,
@@ -62,7 +69,8 @@ export const runSafetyCheck = async (
   const { data: newData } = await supabase
     .from("trips")
     .select("*, profiles(full_name, phone, next_of_kin)")
-    .neq("status", "completed");
+    .neq("status", "completed")
+    .neq("status", "resolved");
   if (newData) setTrips(newData);
   setLoading(false);
 };

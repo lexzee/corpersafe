@@ -1,5 +1,13 @@
 import { MapPin, Search, User } from "lucide-react";
 
+const STATUS_FILTERS = [
+  { id: "all", label: "All" },
+  { id: "danger", label: "SOS" },
+  { id: "responding", label: "Responding" },
+  { id: "active", label: "Active" },
+  { id: "paused", label: "Paused" },
+] as const;
+
 export function AdminSidebar({
   displayTrips,
   selectedTrip,
@@ -8,6 +16,8 @@ export function AdminSidebar({
   timeAgo,
   searchTerm,
   setSearchTerm,
+  statusFilter,
+  setStatusFilter,
 }: any) {
   const renderTripCard = (trip: any) => {
     const isSelected = selectedTrip?.id === trip.id;
@@ -38,14 +48,18 @@ export function AdminSidebar({
         ></div>
 
         <div className="flex justify-between items-start mb-2 pl-2">
-          <span className="font-bold text-foreground">{trip.plate_number}</span>
+          <span className="font-bold text-foreground">
+            {trip.plate_number || trip.tracking_code}
+          </span>
           <span
             className={`text-[10px] font-bold px-2 py-0.5 rounded uppercase ${
               trip.status === "danger"
                 ? "bg-destructive text-destructive-foreground animate-pulse"
-                : trip.status === "paused"
-                  ? "bg-warning/20 text-warning"
-                  : "bg-primary/20 text-primary"
+                : trip.status === "responding"
+                  ? "bg-orange-600/20 text-orange-600"
+                  : trip.status === "paused"
+                    ? "bg-warning/20 text-warning"
+                    : "bg-primary/20 text-primary"
             }`}
           >
             {trip.status}
@@ -96,6 +110,25 @@ export function AdminSidebar({
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full pl-10 pr-4 py-2 bg-background border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
+        </div>
+
+        {/* Status filter tabs */}
+        <div className="flex flex-wrap gap-1.5 mt-3">
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setStatusFilter(f.id)}
+              className={`text-[11px] font-bold px-2.5 py-1 rounded-full border transition ${
+                statusFilter === f.id
+                  ? f.id === "danger"
+                    ? "bg-destructive text-destructive-foreground border-destructive"
+                    : "bg-primary text-primary-foreground border-primary"
+                  : "bg-background text-muted-foreground border-border hover:border-primary/50"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
       </div>
 

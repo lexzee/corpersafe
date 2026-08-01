@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn, safeNextPath } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import {
   AlertCircle,
@@ -34,6 +34,9 @@ export function LoginForm({
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // Where the user was headed before the auth redirect (set by proxy.ts)
+  const nextPath = safeNextPath(searchParams.get("next"));
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -57,7 +60,16 @@ export function LoginForm({
         .single();
       if (profileError) {
         console.error("Error fetching profile:", profileError);
-        router.push("/protected");
+        // Safe default — the personal dashboard ("/protected" is a route
+        // group, not a URL, and 404s)
+        router.push("/pcm");
+        return;
+      }
+
+      // A preserved destination (e.g. a tracking link the user followed
+      // before being asked to log in) wins over the role-based default
+      if (nextPath) {
+        router.push(nextPath);
         return;
       }
 
@@ -159,7 +171,11 @@ export function LoginForm({
             <div className="mt-4 text-center text-sm">
               Don&apos;t have an account?{" "}
               <Link
-                href="/auth/sign-up"
+                href={
+                  nextPath
+                    ? `/auth/sign-up?next=${encodeURIComponent(nextPath)}`
+                    : "/auth/sign-up"
+                }
                 className="underline underline-offset-4"
               >
                 Sign up

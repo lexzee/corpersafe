@@ -41,31 +41,82 @@ function MonitorView({
   const supabase = createClient();
   const [selectedTrip, setSelectedTrip] = useState<any>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const [vehicleDetails, setVehicleDetails] = useState<any>(null);
+  const [statusFilter, setStatusFilter] = useState<string>("all");
 
-  const displayTrips = trips.filter(
-    (t: any) =>
-      t.plate_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.tracking_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.profiles?.full_name?.toLowerCase().includes(searchTerm.toLowerCase()),
-  );
+  // Incidents pin to the top: unacknowledged SOS first, then responding,
+  // then everything else by most recent update.
+  const incidentPriority = (status: string) =>
+    status === "danger" ? 0 : status === "responding" ? 1 : 2;
+
+  const displayTrips = trips
+    .filter(
+      (t: any) =>
+        t.plate_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.tracking_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.profiles?.full_name
+          ?.toLowerCase()
+          .includes(searchTerm.toLowerCase()),
+    )
+    .filter((t: any) => statusFilter === "all" || t.status === statusFilter)
+    .sort(
+      (a: any, b: any) =>
+        incidentPriority(a.status) - incidentPriority(b.status) ||
+        new Date(b.last_updated || 0).getTime() -
+          new Date(a.last_updated || 0).getTime(),
+    );
 
   const dangerCount = trips.filter((t: any) => t.status === "danger").length;
+  const respondingCount = trips.filter(
+    (t: any) => t.status === "responding",
+  ).length;
 
-  // Fetch Vehicle Details when a trip is selected
-  useEffect(() => {
-    if (selectedTrip && selectedTrip.plate_number) {
-      setVehicleDetails(null);
-      supabase
-        .from("vehicles")
-        .select("*")
-        .eq("plate_number", selectedTrip.plate_number)
-        .single()
-        .then(({ data }) => {
-          if (data) setVehicleDetails(data);
-        });
+  // Incident workflow: danger -> responding -> resolved.
+  // Optimistic UI with rollback, plus a best-effort audit entry.
+  const setTripStatus = async (
+    trip: any,
+    newStatus: "responding" | "resolved",
+  ) => {
+    const now = new Date().toISOString();
+    const snapshot = trips;
+
+    setTrips((prev: any[]) =>
+      prev.map((t) =>
+        t.id === trip.id ? { ...t, status: newStatus, last_updated: now } : t,
+      ),
+    );
+    setSelectedTrip((prev: any) =>
+      prev?.id === trip.id
+        ? { ...prev, status: newStatus, last_updated: now }
+        : prev,
+    );
+
+    const { error } = await supabase
+      .from("trips")
+      .update({ status: newStatus, last_updated: now })
+      .eq("id", trip.id);
+
+    if (error) {
+      console.error("Status update failed:", error);
+      setTrips(snapshot);
+      setSelectedTrip(trip);
+      return;
     }
-  }, [selectedTrip]);
+
+    try {
+      await supabase.from("alert_logs").insert({
+        trip_id: trip.id,
+        recipient_contact: "admin-portal",
+        message_body:
+          newStatus === "responding"
+            ? `SOS acknowledged by ${profile?.full_name || "an admin"}`
+            : `Incident resolved by ${profile?.full_name || "an admin"} — traveler marked safe`,
+        status: newStatus === "responding" ? "acknowledged" : "resolved",
+        provider_id: "manual",
+      });
+    } catch (e) {
+      console.warn("Audit log insert failed:", e);
+    }
+  };
 
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-background">
@@ -87,6 +138,7 @@ function MonitorView({
             loading={loading}
             setLoading={setLoading}
             dangerCount={dangerCount}
+            respondingCount={respondingCount}
             setTrips={setTrips}
             profile={profile}
             user={user}
@@ -104,6 +156,8 @@ function MonitorView({
           timeAgo={timeAgo}
           searchTerm={searchTerm}
           setSearchTerm={setSearchTerm}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
         />
 
         {/* Map View */}
@@ -111,12 +165,15 @@ function MonitorView({
           displayTrips={displayTrips}
           selectedTrip={selectedTrip}
           setSelectedTrip={setSelectedTrip}
-          vehicleDetails={vehicleDetails}
+          onSetTripStatus={setTripStatus}
         />
       </div>
     </div>
   );
 }
+
+// Roles allowed into the monitoring portal (profiles.role)
+const ADMIN_ROLES = ["admin", "super_admin", "state_admin", "school_admin"];
 
 export function AdminContent({
   className,
@@ -129,11 +186,10 @@ export function AdminContent({
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any>(null);
   const [trips, setTrips] = useState<any[]>([]);
-  const [selectedTrip, setSelectedTrip] = useState<any>(null);
+  const [unauthorized, setUnauthorized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [authLoading, setAuthLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [vehicleDetails, setVehicleDetails] = useState<any>(null);
 
   const [isMuted, setIsMuted] = useState(false);
   const [audioAllowed, setAudioAllowed] = useState(false);
@@ -196,8 +252,17 @@ export function AdminContent({
 
   //   2. Load Data
   useEffect(() => {
-    if (profile && profile.role === "pcm") {
+    if (!profile) return; // Wait for the profile before deciding anything
+
+    if (profile.role === "pcm") {
       router.push("/pcm");
+      return;
+    }
+
+    // Non-traveler accounts without a recognized admin role get a
+    // friendly rejection instead of silent access to all trips
+    if (!ADMIN_ROLES.includes(profile.role)) {
+      setUnauthorized(true);
       return;
     }
 
@@ -207,7 +272,9 @@ export function AdminContent({
       const { data, error } = await supabase
         .from("trips")
         .select("*, profiles(full_name, phone, next_of_kin)")
-        .neq("status", "completed"); // Only active trips
+        .neq("status", "completed")
+        // Incidents closed via the monitor view become history
+        .neq("status", "resolved");
 
       if (error) {
         console.error("Admin Fetch Error:", error);
@@ -271,23 +338,7 @@ export function AdminContent({
   //   3. Danger Count for Audio
   const dangerCount = trips.filter((t) => t.status === "danger").length;
 
-  // 4. Fetch Vehicle Details when a trip is selected
   //   4. Alarm
-  useEffect(() => {
-    if (selectedTrip && selectedTrip.plate_number) {
-      setVehicleDetails(null);
-      supabase
-        .from("vehicles")
-        .select("*")
-        .eq("plate_number", selectedTrip.plate_number)
-        .single()
-        .then(({ data }) => {
-          if (data) setVehicleDetails(data);
-        });
-    }
-  }, [selectedTrip]);
-
-  //   5. Alarm
   useEffect(() => {
     if (!audioRef.current) return;
 
@@ -311,6 +362,36 @@ export function AdminContent({
   }, [dangerCount, isMuted, audioAllowed]);
 
   // --- RENDER ---
+  if (unauthorized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-6">
+        <Card className="max-w-sm w-full text-center">
+          <CardContent className="p-8 space-y-4">
+            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+              <Shield size={28} />
+            </div>
+            <h1 className="text-xl font-bold">Not authorized</h1>
+            <p className="text-sm text-muted-foreground">
+              This portal is for State Coordinators, School Admins, and
+              Security personnel. Your account doesn&apos;t have an admin
+              role yet — contact CorperSafe support if you believe this is a
+              mistake.
+            </p>
+            <div className="flex gap-3 justify-center">
+              <Button
+                variant="secondary"
+                onClick={() => router.push("/pcm")}
+              >
+                Go to my dashboard
+              </Button>
+              <LogoutButton />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (loading || authLoading)
     return (
       <div className="flex h-screen items-center justify-center gap-2 bg-background">

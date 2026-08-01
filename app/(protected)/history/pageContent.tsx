@@ -55,7 +55,7 @@ export default function HistoryContent() {
         .from("trips")
         .select("*")
         .eq("pcm_id", user.id)
-        .eq("status", "completed")
+        .in("status", ["completed", "resolved"])
         .order("created_at", { ascending: false });
 
       if (error) console.error(error);

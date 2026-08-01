@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn, safeNextPath } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { AlertCircle, Shield } from "lucide-react";
 
@@ -21,6 +21,8 @@ export function SignUpForm({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
+  const searchParams = useSearchParams();
+  const nextPath = safeNextPath(searchParams.get("next")) || "/pcm";
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -48,8 +50,9 @@ export function SignUpForm({
         password,
         options: {
           // Must go through /auth/confirm so the OTP token is verified;
-          // "/protected" is a route group, not a real URL (it 404s).
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=/pcm`,
+          // "next" carries the user's intended destination (e.g. a
+          // tracking link) or falls back to the traveler dashboard.
+          emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(nextPath)}`,
           data: {
             full_name: fullName,
             phone: phone,

@@ -1,11 +1,19 @@
 import { timeAgo, tripIsStale } from "@/lib/utils";
-import { AlertTriangle, BellRing, Shield } from "lucide-react";
+import { AlertTriangle, CheckCircle, Copy, Shield } from "lucide-react";
 
 const TripDetails = ({
   selectedTrip,
   setSelectedTrip,
-  vehicleDetails,
+  onSetTripStatus,
 }: any) => {
+
+  const copyCoordinates = () => {
+    if (selectedTrip.current_lat == null || selectedTrip.current_lng == null)
+      return;
+    navigator.clipboard.writeText(
+      `${selectedTrip.current_lat.toFixed(5)}, ${selectedTrip.current_lng.toFixed(5)}`,
+    );
+  };
   return (
     <div className="absolute top-4 right-4 w-80 bg-card/95 backdrop-blur rounded-xl shadow-2xl border border-border p-5 z-[1000] animate-in slide-in-from-right">
       <div className="flex justify-between items-start mb-4">
@@ -28,37 +36,11 @@ const TripDetails = ({
       <div className="space-y-3 text-sm">
         <div className="bg-muted/50 p-3 rounded-lg border border-border">
           <div className="flex justify-between text-xs mb-1 text-muted-foreground uppercase font-bold">
-            Driver Status
+            Vehicle
           </div>
-          {vehicleDetails ? (
-            <>
-              <div className="flex justify-between items-center mb-1">
-                <span className="font-mono font-bold text-foreground">
-                  {selectedTrip.plate_number}
-                </span>
-                <span className="text-success text-xs flex items-center gap-1 font-bold bg-success/10 px-1 rounded border border-success/20">
-                  <Shield size={10} /> VERIFIED
-                </span>
-              </div>
-              <div className="text-xs text-muted-foreground border-t border-border pt-1 mt-1">
-                <span className="block font-bold">
-                  {vehicleDetails.vehicle_model} ({vehicleDetails.color})
-                </span>
-                <span className="block opacity-75">
-                  {vehicleDetails.owner_name}
-                </span>
-              </div>
-            </>
-          ) : (
-            <div className="flex justify-between items-center">
-              <span className="font-mono font-bold text-foreground">
-                {selectedTrip.plate_number}
-              </span>
-              <span className="text-muted-foreground text-xs italic">
-                Registry info unavailable
-              </span>
-            </div>
-          )}
+          <span className="font-mono font-bold text-foreground">
+            {selectedTrip.plate_number || "Not provided"}
+          </span>
         </div>
 
         <div className="flex justify-between py-2 border-b border-border">
@@ -126,21 +108,65 @@ const TripDetails = ({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-3 mt-5">
-        <button className="bg-card border border-border text-card-foreground py-2 rounded-lg text-xs font-bold hover:bg-muted">
-          Call Driver
-        </button>
+      {selectedTrip.status === "responding" && (
+        <div className="mt-4 bg-amber-600/10 border border-amber-600/30 p-3 rounded-lg text-amber-600 text-xs font-medium">
+          <strong className="flex items-center gap-1">
+            <Shield size={12} /> INCIDENT ACKNOWLEDGED — RESPONSE IN PROGRESS
+          </strong>
+          <p className="mt-1">
+            Updated {timeAgo(selectedTrip.last_updated)}.
+          </p>
+        </div>
+      )}
+
+      {/* ---- Incident workflow ---- */}
+      {selectedTrip.status === "danger" && (
         <button
-          onClick={() =>
-            alert(
-              `Simulating Dispatch to Police HQ for coords: ${selectedTrip.current_lat}, ${selectedTrip.current_lng}`,
-            )
-          }
-          className="bg-destructive text-destructive-foreground py-2 rounded-lg text-xs font-bold hover:bg-destructive/90 shadow-lg shadow-destructive/20 flex items-center justify-center gap-2"
+          onClick={() => onSetTripStatus(selectedTrip, "responding")}
+          className="w-full mt-4 bg-amber-600 text-white py-2.5 rounded-lg text-xs font-bold hover:bg-amber-600/90 shadow-lg shadow-amber-600/20 flex items-center justify-center gap-2 active:scale-95 transition"
         >
-          <BellRing size={14} /> Dispatch Police
+          <Shield size={14} /> Acknowledge SOS — Mark as Responding
         </button>
+      )}
+      {selectedTrip.status === "responding" && (
+        <button
+          onClick={() => onSetTripStatus(selectedTrip, "resolved")}
+          className="w-full mt-4 bg-primary text-primary-foreground py-2.5 rounded-lg text-xs font-bold hover:bg-primary/90 shadow-lg shadow-primary/20 flex items-center justify-center gap-2 active:scale-95 transition"
+        >
+          <CheckCircle size={14} /> Resolve Incident (traveler is safe)
+        </button>
+      )}
+
+      {/* ---- Contact actions ---- */}
+      <div className="grid grid-cols-2 gap-3 mt-3">
+        {selectedTrip.profiles?.phone ? (
+          <a
+            href={`tel:${selectedTrip.profiles.phone}`}
+            className="bg-card border border-border text-card-foreground py-2 rounded-lg text-xs font-bold hover:bg-muted text-center transition"
+          >
+            Traveler
+          </a>
+        ) : (
+          <span className="bg-muted/50 border border-border text-muted-foreground py-2 rounded-lg text-xs font-bold text-center italic">
+            No traveler phone
+          </span>
+        )}
+        <a
+          href="tel:112"
+          className="bg-destructive text-destructive-foreground py-2 rounded-lg text-xs font-bold hover:bg-destructive/90 text-center shadow-lg shadow-destructive/20 transition"
+        >
+          Emergency (112)
+        </a>
       </div>
+      {selectedTrip.current_lat != null &&
+        selectedTrip.current_lng != null && (
+          <button
+            onClick={copyCoordinates}
+            className="w-full mt-2 text-muted-foreground hover:text-foreground text-xs font-medium flex items-center justify-center gap-1.5 py-1.5 transition"
+          >
+            <Copy size={12} /> Copy coordinates for dispatch
+          </button>
+        )}
     </div>
   );
 };

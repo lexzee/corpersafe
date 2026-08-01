@@ -37,6 +37,7 @@ const createIcon = (color: string) =>
 const Icons = {
   active: createIcon("#10b981"), // Green
   paused: createIcon("#f59e0b"), // Amber
+  responding: createIcon("#ea580c"), // Orange — help dispatched
   danger: new L.DivIcon({
     // Pulsing Red for SOS - Animation applied to inner div to avoid Leaflet transform conflict
     className: "bg-transparent border-none",
@@ -71,7 +72,7 @@ export function AdminMapView({
   displayTrips,
   selectedTrip,
   setSelectedTrip,
-  vehicleDetails,
+  onSetTripStatus,
 }: any) {
   const { resolvedTheme } = useTheme();
 
@@ -96,9 +97,11 @@ export function AdminMapView({
                 icon={
                   trip.status === "danger"
                     ? Icons.danger
-                    : trip.status === "paused"
-                      ? Icons.paused
-                      : Icons.active
+                    : trip.status === "responding"
+                      ? Icons.responding
+                      : trip.status === "paused"
+                        ? Icons.paused
+                        : Icons.active
                 }
                 eventHandlers={{ click: () => setSelectedTrip(trip) }}
               />
@@ -112,7 +115,7 @@ export function AdminMapView({
         <TripDetails
           selectedTrip={selectedTrip}
           setSelectedTrip={setSelectedTrip}
-          vehicleDetails={vehicleDetails}
+          onSetTripStatus={onSetTripStatus}
         />
       )}
     </div>

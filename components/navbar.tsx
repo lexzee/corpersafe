@@ -64,6 +64,7 @@ export function AdminNavbar({
   loading,
   setLoading,
   dangerCount,
+  respondingCount = 0,
   setTrips,
   user,
   profile,
@@ -85,7 +86,8 @@ export function AdminNavbar({
       const { data } = await supabase
         .from("trips")
         .select("*, profiles(full_name, phone, next_of_kin)")
-        .neq("status", "completed");
+        .neq("status", "completed")
+        .neq("status", "resolved");
       if (data) setTrips(data);
     }
     setLoading(false);
@@ -124,6 +126,13 @@ export function AdminNavbar({
           <div className="flex items-center gap-2 px-4 py-2 bg-destructive text-destructive-foreground rounded-lg text-sm font-bold shadow-lg shadow-destructive/20 animate-pulse">
             <AlertTriangle size={18} />
             {dangerCount} SOS {dangerCount > 1 ? "S" : ""}
+          </div>
+        )}
+
+        {respondingCount > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-bold shadow-lg shadow-amber-600/20">
+            <Shield size={18} />
+            {respondingCount} RESPONDING
           </div>
         )}
 
