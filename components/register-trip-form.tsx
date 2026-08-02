@@ -84,15 +84,17 @@ export function RegisterTripForm({
 
       // Pre-fill the emergency contact from the profile (captured at signup
       // or edited in Profile Settings), so it doesn't have to be typed again.
+      // Encrypted at rest — /api/profile decrypts it server-side.
       if (user) {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("next_of_kin, next_of_kin_email")
-          .eq("id", user.id)
-          .single();
-        if (profile) {
-          setNextOfKin(profile.next_of_kin || "");
-          setNextOfKinEmail(profile.next_of_kin_email || "");
+        try {
+          const res = await fetch("/api/profile", { cache: "no-store" });
+          if (res.ok) {
+            const { profile } = await res.json();
+            setNextOfKin(profile.next_of_kin || "");
+            setNextOfKinEmail(profile.next_of_kin_email || "");
+          }
+        } catch {
+          // Non-fatal: the fields stay empty and can be typed in.
         }
       }
 
@@ -190,43 +192,20 @@ export function RegisterTripForm({
     const userId = user.id;
 
     try {
-      // Save next-of-kin onto the profile. If the profile row doesn't
-      // exist yet (e.g. no handle_new_user trigger in this project), the
-      // trips insert below would fail its pcm_id foreign key (409), so
-      // create the row from the auth metadata as a fallback. The insert is
-      // ignore-duplicates: if the row exists but the UPDATE was blocked by
-      // a broken RLS policy, we don't fight it — the SQL migration fixes
-      // the policies properly.
-      const { data: updatedProfile, error: profileError } = await supabase
-        .from("profiles")
-        .update({
+      // Save next-of-kin onto the profile via the server, which encrypts it
+      // before it lands in Postgres. This also upserts the row, so the trips
+      // insert below can't fail its pcm_id foreign key.
+      const profileRes = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           next_of_kin: nextOfKin,
           next_of_kin_email: nextOfKinEmail,
-        })
-        .eq("id", userId)
-        .select("id");
-
-      if (profileError) {
-        console.warn("Profile update error:", profileError);
+        }),
+      });
+      if (!profileRes.ok) {
+        console.warn("Could not save next-of-kin details.");
       }
-
-      if (profileError || !updatedProfile || updatedProfile.length === 0) {
-        const { error: insertError } = await supabase.from("profiles").upsert(
-          {
-            id: userId,
-            full_name: user.user_metadata?.full_name || "",
-            phone: user.user_metadata?.phone || "",
-            role: "pcm",
-            next_of_kin: nextOfKin,
-            next_of_kin_email: nextOfKinEmail,
-          },
-          { onConflict: "id", ignoreDuplicates: true },
-        );
-        if (insertError)
-          console.warn("Profile fallback insert error:", insertError);
-      }
-
-      const trackingCode = "NYSC-" + Math.floor(10000 + Math.random() * 90000);
 
       // Pin the CAMP (allowed_states.campName), not the state: one free
       // Nominatim geocode at registration stores the precise destination
@@ -258,7 +237,9 @@ export function RegisterTripForm({
         destination_lng: destinationLng,
         institution,
         status: "pending",
-        tracking_code: trackingCode,
+        // tracking_code is omitted on purpose: the database default
+        // (public.generate_tracking_code) issues a 6-character CSPRNG code
+        // from an unambiguous alphabet and guarantees uniqueness.
         current_lat: startCoords?.lat ?? null,
         current_lng: startCoords?.lng ?? null,
       });

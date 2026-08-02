@@ -44,23 +44,33 @@ export function SignUpForm({
     }
 
     try {
+      // Only the role travels in user metadata. Personal details are NOT put
+      // in raw_user_meta_data — that column is plaintext in auth.users, which
+      // would defeat encrypting the same values in profiles.
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            full_name: fullName,
-            phone: phone,
-            role: "pcm",
-            // Persisted to profiles by the on_auth_user_created trigger, so
-            // trip registration can pre-fill the emergency contact instead of
-            // asking for it again.
-            next_of_kin: nextOfKin,
-            next_of_kin_email: nextOfKinEmail,
-          },
-        },
+        options: { data: { role: "pcm" } },
       });
       if (error) throw error;
+
+      // Signup leaves us briefly authenticated (email confirmation is off),
+      // so use that session to store the PII via the server, which encrypts
+      // it before it reaches Postgres.
+      const profileRes = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_name: fullName,
+          phone,
+          next_of_kin: nextOfKin,
+          next_of_kin_email: nextOfKinEmail,
+        }),
+      });
+      if (!profileRes.ok) {
+        // The account exists; the details can be re-entered from Profile.
+        console.error("Could not save profile details at signup.");
+      }
 
       // Supabase authenticates users immediately when email confirmation is
       // disabled. Clear that signup session, then perform a real browser

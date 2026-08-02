@@ -38,11 +38,12 @@ export function isAdminRole(role: string | null | undefined) {
 // "NYSC53198", "NYSC-53198". Normalise to the stored "NYSC-#####" form;
 // returns "" when nothing usable was entered.
 export function normalizeTrackingCode(raw: string | null | undefined) {
-  const compact = (raw ?? "")
-    .trim()
-    .toUpperCase()
-    .replace(/\s+/g, "");
-  const id = compact.replace(/^NYSC-?/, "");
+  // Parents type codes every possible way: "8q2k7m", "nysc 8Q2K7M",
+  // "NYSC-8Q2K7M", or paste one with a stray dash. Strip everything that
+  // isn't a letter or digit from the identifier so all of those resolve.
+  // Must stay in sync with the same normalisation inside public.track_trip().
+  const compact = (raw ?? "").trim().toUpperCase().replace(/\s+/g, "");
+  const id = compact.replace(/^NYSC-?/, "").replace(/[^A-Z0-9]/g, "");
   return id ? `NYSC-${id}` : "";
 }
 
@@ -97,13 +98,16 @@ export const runSafetyCheck = async (
     }
   }
 
-  // Refetch data to update UI
-  const { data: newData } = await supabase
-    .from("trips")
-    .select("*, profiles(full_name, phone, next_of_kin)")
-    .neq("status", "completed")
-    .neq("status", "resolved");
-  if (newData) setTrips?.(newData);
+  // Refetch through the admin API so encrypted PII comes back decrypted.
+  try {
+    const res = await fetch("/api/admin/trips", { cache: "no-store" });
+    if (res.ok) {
+      const { trips } = await res.json();
+      if (trips) setTrips?.(trips);
+    }
+  } catch (e) {
+    console.error("Could not refresh trips:", e);
+  }
   setLoading?.(false);
 };
 

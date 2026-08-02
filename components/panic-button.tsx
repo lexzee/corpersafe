@@ -133,21 +133,23 @@ export default function PanicButton({
       vibrate([150, 50, 150]);
 
       // Notify next-of-kin by email (best-effort — the admin flag is live
-      // even if the email fails)
-      const { data: fullTrip } = await supabase
-        .from("trips")
-        .select("*, profiles(full_name, next_of_kin_email)")
-        .eq("id", trip.id)
-        .single();
+      // even if the email fails).
+      //
+      // Next-of-kin details are encrypted at rest, so the browser can't read
+      // them: /api/sos decrypts server-side after checking this is our trip.
+      const sosRes = await fetch(`/api/sos?trip_id=${trip.id}`, {
+        cache: "no-store",
+      });
+      const sosData = sosRes.ok ? await sosRes.json() : null;
 
-      if (fullTrip?.profiles?.next_of_kin_email) {
-        const link = `${window.location.origin}/track?code=${fullTrip.tracking_code}`;
+      if (sosData?.next_of_kin_email) {
+        const link = `${window.location.origin}/track?code=${sosData.trip.tracking_code}`;
         const res = await sendEmergencyEmail(
-          fullTrip.id,
-          fullTrip.profiles.next_of_kin_email,
-          fullTrip.profiles.full_name,
+          sosData.trip.id,
+          sosData.next_of_kin_email,
+          sosData.pcm_name || "A corps member",
           link,
-          fullTrip.plate_number,
+          sosData.trip.plate_number,
         );
         setEmailNote(
           res.success

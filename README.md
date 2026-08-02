@@ -9,7 +9,7 @@
 ## How it works
 
 ```
-PCM registers trip ──► shares NYSC-XXXXX code with family ──► START JOURNEY
+PCM registers trip ──► shares NYSC-XXXXXX code with family ──► START JOURNEY
         │                                                        │
         ▼                                                        ▼
 Admins see trip on Mission Control ◄── live GPS (watchPosition) ── phone

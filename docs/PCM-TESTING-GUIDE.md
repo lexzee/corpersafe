@@ -8,7 +8,7 @@
 ## What it is
 
 - A **travel-safety app for corps members going to camp** — your phone becomes a live tracker for the journey.
-- You register your trip, get a **Tracking ID** (e.g. `NYSC-53198`), and send it to your parents.
+- You register your trip, get a **Tracking ID** (e.g. `NYSC-8Q2K7M`), and send it to your parents.
 - **Parents follow you on a live map with no account and no app** — they just open the link.
 - If anything goes wrong, an **SOS button** emails your next of kin and flags you on the admin dashboard.
 - State coordinators / school admins see every active trip on a **Mission Control** map and respond to alerts.

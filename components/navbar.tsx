@@ -190,13 +190,12 @@ export function AdminNavbar({
         .update({ is_demo: true })
         .or(DEMO_FINGERPRINT)
         .gte("created_at", since);
-      // Trigger refetch
-      const { data } = await supabase
-        .from("trips")
-        .select("*, profiles(full_name, phone, next_of_kin)")
-        .neq("status", "completed")
-        .neq("status", "resolved");
-      if (data) setTrips(data);
+      // Trigger refetch (via the admin API: PII is encrypted at rest)
+      const res = await fetch("/api/admin/trips", { cache: "no-store" });
+      if (res.ok) {
+        const { trips } = await res.json();
+        if (trips) setTrips(trips);
+      }
       // Re-sync the button state from the DB (the trips-prop effect also
       // does this, but do it here so the label flips immediately).
       await checkDemoTrips();
@@ -255,13 +254,12 @@ export function AdminNavbar({
       setDemoCount(0);
     }
 
-    // Refresh the trip list either way
-    const { data: trips } = await supabase
-      .from("trips")
-      .select("*, profiles(full_name, phone, next_of_kin)")
-      .neq("status", "completed")
-      .neq("status", "resolved");
-    if (trips) setTrips(trips);
+    // Refresh the trip list either way (admin API decrypts traveler PII)
+    const refreshed = await fetch("/api/admin/trips", { cache: "no-store" });
+    if (refreshed.ok) {
+      const { trips } = await refreshed.json();
+      if (trips) setTrips(trips);
+    }
     setLoading(false);
   };
 
