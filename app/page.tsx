@@ -2,12 +2,11 @@
 
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import Link from "next/link";
-import { useState, useEffect, type ComponentProps } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   BellRing,
-  CheckCircle,
   History,
   Lock,
   Menu,
@@ -186,7 +185,7 @@ export default function Home() {
             <div className="text-center lg:text-left animate-in slide-in-from-left duration-700">
               <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-6 border border-primary/20">
                 <span className="w-2 h-2 bg-accent rounded-full animate-pulse"></span>
-                Active Nationwide
+                Built for safer journeys to camp
               </div>
               <h1 className="text-4xl lg:text-6xl font-extrabold text-foreground leading-tight mb-6">
                 Travel to Camp, <br />
@@ -195,9 +194,9 @@ export default function Home() {
                 </span>
               </h1>
               <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto lg:mx-0">
-                The official safety companion for NYSC Corps Members. Verify
-                vehicles instantly, share your live location, and get rapid
-                response in emergencies.
+                A safety companion for NYSC Corps Members travelling to
+                orientation camp. Register your journey, share your live
+                location with family, and get help when you need it.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
@@ -237,8 +236,8 @@ export default function Home() {
                   <Lock size={14} className="text-primary" /> Secure Data
                 </span>
                 <span className="flex items-center gap-1">
-                  <Shield size={14} className="text-primary" />
-                  Verified Transport
+                  <Radio size={14} className="text-primary" />
+                  Live Location
                 </span>
               </div>
             </div>
@@ -301,18 +300,18 @@ export default function Home() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="bg-secondary p-3 rounded-xl border">
                       <p className="text-[10px] text-muted-foreground uppercase font-bold">
-                        Vehicle
+                        GPS Status
                       </p>
                       <p className="font-bold text-sm flex items-center gap-1">
-                        Verified{" "}
-                        <CheckCircle size={14} className="text-primary" />
+                        Tracking active
+                        <Radio size={14} className="text-primary" />
                       </p>
                     </div>
                     <div className="bg-secondary p-3 rounded-xl border">
                       <p className="text-[10px] text-muted-foreground uppercase font-bold">
-                        ETA to Camp
+                        Destination
                       </p>
-                      <p className="font-bold text-sm">14:30 PM</p>
+                      <p className="font-bold text-sm">Orientation Camp</p>
                     </div>
                   </div>
                 </CardContent>
@@ -336,7 +335,7 @@ export default function Home() {
               {
                 step: "01",
                 title: "Register Trip",
-                desc: "Enter vehicle details and destination before you move.",
+                desc: "Choose your destination, add your emergency contact, and create a trip before you move.",
               },
               {
                 step: "02",
@@ -346,7 +345,7 @@ export default function Home() {
               {
                 step: "03",
                 title: "Stay Safe",
-                desc: "We monitor your journey and alert authorities in emergencies.",
+                desc: "Keep tracking on while you travel, and use SOS to alert your next of kin and the admin team in an emergency.",
               },
             ].map((s, i) => (
               <div
@@ -387,24 +386,24 @@ export default function Home() {
           <div className="grid md:grid-cols-4 gap-8">
             {[
               {
-                icon: <CheckCircle className="w-8 h-8 text-primary" />,
-                title: "Vehicle Registry",
-                desc: "Don't board blindly. Verify the plate number against our national transport database before you enter.",
+                icon: <Navigation className="w-8 h-8 text-primary" />,
+                title: "Trip Registration",
+                desc: "Set your destination, institution, origin, and emergency contacts before you leave for camp.",
               },
               {
                 icon: <Radio className="w-8 h-8 text-blue-600" />,
-                title: "Live Tracking",
-                desc: "Real-time GPS updates. Parents can watch your movement on a map without needing an account.",
+                title: "Live Location",
+                desc: "Share a tracking code so family can follow your journey on a map without needing an account.",
               },
               {
                 icon: <BellRing className="w-8 h-8 text-destructive" />,
-                title: "Instant Alerts",
-                desc: "One-tap SOS triggers emails to your Next of Kin and flashes red on the State Admin's dashboard.",
+                title: "SOS Alerts",
+                desc: "Hold the SOS button to alert your next of kin by email and notify the admin team monitoring the trip.",
               },
               {
                 icon: <History className="w-8 h-8 text-destructive" />,
                 title: "Trip History",
-                desc: "Keep a log of all your journeys. Replay your exact route on a map to show family where you went.",
+                desc: "Review completed journeys and replay the GPS route on a map after you arrive.",
               },
             ].map((feature, idx) => (
               <Card
@@ -454,8 +453,8 @@ export default function Home() {
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground mb-6">
-                  Traveling to camp? Register your trip, verify your driver, and
-                  share your live location link.
+                  Traveling to camp? Register your journey, share your tracking
+                  code with family, and keep your live location available while you travel.
                 </p>
                 <Button variant="link" asChild>
                   <Link href="/register-trip">
@@ -494,12 +493,12 @@ export default function Home() {
               <div className="absolute top-0 right-0 bg-amber-600 w-24 h-24 rounded-bl-full -mr-4 -mt-4 opacity-10 group-hover:opacity-20 transition"></div>
               <CardHeader>
                 <Shield className="w-10 h-10 text-amber-400 mb-6" />
-                <CardTitle>Security & Admins</CardTitle>
+                <CardTitle>Coordinators & Admins</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-muted-foreground mb-6">
-                  State Coordinators, School Admins, and Security agencies
-                  portal for monitoring active trips.
+                  State Coordinators and School Admins can monitor active trips,
+                  view live locations, and respond to SOS alerts.
                 </p>
                 <Button
                   variant="link"
