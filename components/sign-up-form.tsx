@@ -1,6 +1,6 @@
 "use client";
 
-import { cn, safeNextPath } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+
 import { useState } from "react";
 import { AlertCircle, Shield } from "lucide-react";
 
@@ -21,8 +21,6 @@ export function SignUpForm({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  const searchParams = useSearchParams();
-  const nextPath = safeNextPath(searchParams.get("next")) || "/pcm";
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -32,7 +30,6 @@ export function SignUpForm({
   const [repeatPassword, setRepeatPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,15 +63,17 @@ export function SignUpForm({
       if (error) throw error;
 
       // Supabase authenticates users immediately when email confirmation is
-      // disabled. Clear that short-lived signup session so the user signs in
-      // normally and receives a fresh session.
-      const { error: signOutError } = await supabase.auth.signOut();
-      if (signOutError) throw signOutError;
-
-      const loginPath = nextPath
-        ? `/auth/login?next=${encodeURIComponent(nextPath)}`
-        : "/auth/login";
-      router.replace(loginPath);
+      // disabled. Clear that signup session, then perform a real browser
+      // navigation so no client-side auth state or route is reused.
+      const { error: signOutError } = await supabase.auth.signOut({
+        scope: "local",
+      });
+      if (signOutError) {
+        // The account was created successfully. Still leave the signup page;
+        // a full navigation will initialise a clean auth client on /login.
+        console.error("Could not clear signup session:", signOutError);
+      }
+      window.location.replace("/auth/login");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
