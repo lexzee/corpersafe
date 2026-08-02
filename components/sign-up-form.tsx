@@ -1,6 +1,6 @@
 "use client";
 
-import { cn, safeNextPath } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+
 import { useState } from "react";
 import { AlertCircle, Shield } from "lucide-react";
 
@@ -21,8 +21,6 @@ export function SignUpForm({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  const searchParams = useSearchParams();
-  const nextPath = safeNextPath(searchParams.get("next")) || "/pcm";
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -32,7 +30,6 @@ export function SignUpForm({
   const [repeatPassword, setRepeatPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,13 +48,6 @@ export function SignUpForm({
         email,
         password,
         options: {
-          // The confirmation email's link lands on /auth/confirm, which is a
-          // client page: Supabase's default {{ .ConfirmationURL }} template
-          // redirects back with the session in the URL fragment, and the
-          // browser client picks it up automatically. "next" carries the
-          // user's intended destination (e.g. a tracking link) or falls back
-          // to the traveler dashboard.
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(nextPath)}`,
           data: {
             full_name: fullName,
             phone: phone,
@@ -71,7 +61,19 @@ export function SignUpForm({
         },
       });
       if (error) throw error;
-      router.push("/auth/sign-up-success");
+
+      // Supabase authenticates users immediately when email confirmation is
+      // disabled. Clear that signup session, then perform a real browser
+      // navigation so no client-side auth state or route is reused.
+      const { error: signOutError } = await supabase.auth.signOut({
+        scope: "local",
+      });
+      if (signOutError) {
+        // The account was created successfully. Still leave the signup page;
+        // a full navigation will initialise a clean auth client on /login.
+        console.error("Could not clear signup session:", signOutError);
+      }
+      window.location.replace("/auth/login");
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
