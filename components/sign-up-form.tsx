@@ -47,17 +47,10 @@ export function SignUpForm({
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data: authData, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
-          // The confirmation email's link lands on /auth/confirm, which is a
-          // client page: Supabase's default {{ .ConfirmationURL }} template
-          // redirects back with the session in the URL fragment, and the
-          // browser client picks it up automatically. "next" carries the
-          // user's intended destination (e.g. a tracking link) or falls back
-          // to the traveler dashboard.
-          emailRedirectTo: `${window.location.origin}/auth/confirm?next=${encodeURIComponent(nextPath)}`,
           data: {
             full_name: fullName,
             phone: phone,
@@ -71,7 +64,16 @@ export function SignUpForm({
         },
       });
       if (error) throw error;
-      router.push("/auth/sign-up-success");
+
+      // Email confirmation is disabled in Supabase, so a successful signup
+      // includes an authenticated session. Send the new PCM straight to the
+      // dashboard instead of showing the old "check your email" screen.
+      if (!authData.session) {
+        throw new Error(
+          "Account created, but no session was returned. Please try signing in.",
+        );
+      }
+      router.replace(nextPath);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {

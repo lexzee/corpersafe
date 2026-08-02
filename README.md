@@ -64,20 +64,14 @@ Plus the RPC functions `check_signal_loss()` (dead-man's-switch scan), `generate
 
 Parents track **without accounts**, so the `anon` role needs read access. Apply the migration in [`supabase/migrations/`](supabase/migrations) (SQL Editor or `supabase db push`) — it adds scoped RLS policies and puts `trips` in the realtime publication. See [`supabase/README.md`](supabase/README.md) for details and verification steps.
 
-### 3. Auth email links (no dashboard changes needed)
+### 3. Auth configuration
 
-Email confirmation & password-reset emails use Supabase's **default** templates
-(`{{ .ConfirmationURL }}`). Clicking a link goes through Supabase's hosted
-verify endpoint, which redirects back to the app with the session in the URL
-*fragment*; [`/auth/confirm`](app/auth/confirm) is a client page that picks it
-up automatically (a server route can never see URL fragments).
+Email confirmation is disabled in Supabase, so new PCMs are signed in immediately
+and redirected to their dashboard after registration. Password-reset emails still use Supabase's default templates
+(`{{ .ConfirmationURL }}`) and return users to `/auth/update-password`.
 
-Customised templates that link straight to the app also work — the page accepts
-`?token_hash=...&type=...` (e.g.
-`{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=signup`) and PKCE
-`?code=...` query params. Just keep `{{ .ConfirmationURL }}` (or point the
-template at `/auth/confirm` with the params above) and add your app URL to
-**Authentication → URL Configuration → Redirect URLs** in the dashboard.
+Add the app URL to **Authentication → URL Configuration → Redirect URLs** in the
+Supabase dashboard.
 
 ### 4. Environment variables
 
