@@ -47,7 +47,7 @@ export function SignUpForm({
     }
 
     try {
-      const { data: authData, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -65,15 +65,16 @@ export function SignUpForm({
       });
       if (error) throw error;
 
-      // Email confirmation is disabled in Supabase, so a successful signup
-      // includes an authenticated session. Send the new PCM straight to the
-      // dashboard instead of showing the old "check your email" screen.
-      if (!authData.session) {
-        throw new Error(
-          "Account created, but no session was returned. Please try signing in.",
-        );
-      }
-      router.replace(nextPath);
+      // Supabase authenticates users immediately when email confirmation is
+      // disabled. Clear that short-lived signup session so the user signs in
+      // normally and receives a fresh session.
+      const { error: signOutError } = await supabase.auth.signOut();
+      if (signOutError) throw signOutError;
+
+      const loginPath = nextPath
+        ? `/auth/login?next=${encodeURIComponent(nextPath)}`
+        : "/auth/login";
+      router.replace(loginPath);
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : "An error occurred");
     } finally {
