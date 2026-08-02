@@ -44,23 +44,49 @@ export function SignUpForm({
     }
 
     try {
-      const { error } = await supabase.auth.signUp({
+      // Only the role travels in user metadata. Personal details are NOT put
+      // in raw_user_meta_data — that column is plaintext in auth.users, which
+      // would defeat encrypting the same values in profiles.
+      const { data: signUpData, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            full_name: fullName,
-            phone: phone,
-            role: "pcm",
-            // Persisted to profiles by the on_auth_user_created trigger, so
-            // trip registration can pre-fill the emergency contact instead of
-            // asking for it again.
-            next_of_kin: nextOfKin,
-            next_of_kin_email: nextOfKinEmail,
-          },
-        },
+        options: { data: { role: "pcm" } },
       });
       if (error) throw error;
+
+      // Signup leaves us briefly authenticated (email confirmation is off),
+      // so use that session to store the PII via the server, which encrypts
+      // it before it reaches Postgres.
+      //
+      // Pass the access token explicitly: the auth cookie may not be written
+      // yet at this point, and relying on it was a race that silently lost
+      // the user's name and next-of-kin details.
+      const accessToken = signUpData.session?.access_token;
+      const profileRes = await fetch("/api/profile", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken
+            ? { Authorization: `Bearer ${accessToken}` }
+            : {}),
+        },
+        body: JSON.stringify({
+          full_name: fullName,
+          phone,
+          next_of_kin: nextOfKin,
+          next_of_kin_email: nextOfKinEmail,
+        }),
+      });
+
+      if (!profileRes.ok) {
+        // Don't strand the user with a half-built account: the login would
+        // succeed but every screen would show a blank name.
+        const detail = await profileRes.json().catch(() => ({}));
+        console.error("Could not save profile details at signup:", detail);
+        throw new Error(
+          "Your account was created, but we couldn't save your details. Please log in and complete your profile.",
+        );
+      }
 
       // Supabase authenticates users immediately when email confirmation is
       // disabled. Clear that signup session, then perform a real browser

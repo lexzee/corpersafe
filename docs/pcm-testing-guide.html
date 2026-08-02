@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CorperSafe — Tester Guide (PCMs)</title>
+<style>
+  :root{
+    --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --card:#ffffff;
+    --brand:#047857; --brand-soft:#ecfdf5; --danger:#dc2626; --danger-soft:#fef2f2;
+    --warn:#b45309; --warn-soft:#fffbeb; --blue:#1d4ed8; --blue-soft:#eff6ff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:32px 20px 56px;
+    background:#f8fafc; color:var(--ink);
+    font:16px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  .wrap{max-width:860px;margin:0 auto}
+
+  header{
+    background:linear-gradient(135deg,#065f46,#047857);
+    color:#fff;border-radius:18px;padding:26px 28px;
+  }
+  header h1{margin:0;font-size:28px;letter-spacing:-.02em}
+  header p{margin:6px 0 0;opacity:.92;font-size:15px}
+  .linkrow{
+    margin-top:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  }
+  .pill{
+    background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.28);
+    padding:7px 13px;border-radius:999px;font-size:13.5px;font-weight:600;
+  }
+  .pill a{color:#fff;text-decoration:none}
+
+  h2{
+    font-size:13px;text-transform:uppercase;letter-spacing:.09em;
+    color:var(--muted);margin:34px 0 12px;font-weight:800;
+  }
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:20px 24px;
+  }
+  ul{margin:0;padding-left:20px}
+  li{margin:8px 0}
+  li::marker{color:var(--brand)}
+  strong{font-weight:700}
+  code{
+    background:#f1f5f9;border:1px solid var(--line);border-radius:6px;
+    padding:1px 6px;font:600 13.5px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+
+  .steps{display:grid;gap:14px}
+  .step{
+    background:var(--card);border:1px solid var(--line);border-radius:14px;
+    padding:18px 22px 18px 20px;border-left:4px solid var(--brand);
+  }
+  .step h3{
+    margin:0 0 8px;font-size:16.5px;display:flex;align-items:center;gap:10px;
+  }
+  .num{
+    background:var(--brand-soft);color:var(--brand);border:1px solid #a7f3d0;
+    width:26px;height:26px;border-radius:8px;display:inline-flex;
+    align-items:center;justify-content:center;font-size:13px;font-weight:800;flex:none;
+  }
+  .step ul{padding-left:18px}
+  .step li{margin:6px 0;font-size:15px}
+
+  .sos{border-left-color:var(--danger);background:var(--danger-soft)}
+  .sos .num{background:#fee2e2;color:var(--danger);border-color:#fecaca}
+  .note{
+    margin-top:10px;background:#fff;border:1px dashed #fca5a5;color:#7f1d1d;
+    border-radius:10px;padding:9px 13px;font-size:14px;font-weight:600;
+  }
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:640px){.grid2{grid-template-columns:1fr}}
+  .mini{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 20px}
+  .mini h4{margin:0 0 8px;font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .mini ul{padding-left:18px}
+  .mini li{font-size:14.5px}
+
+  .feedback{background:var(--blue-soft);border:1px solid #bfdbfe;border-radius:14px;padding:20px 24px}
+  .feedback li{font-size:15px}
+  .feedback li::marker{color:var(--blue)}
+
+  footer{margin-top:30px;text-align:center;color:var(--muted);font-size:13px}
+
+  @media print{
+    body{background:#fff;padding:0;font-size:12.5px}
+    header{border-radius:0}
+    .card,.step,.mini,.feedback{break-inside:avoid}
+    h2{margin-top:20px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>🛡️ CorperSafe — Tester Guide</h1>
+    <p>Travel to camp, arrive safely. A live-tracking safety companion for corps members.</p>
+    <div class="linkrow">
+      <span class="pill">🔗 <a href="https://corpersafe.vercel.app">corpersafe.vercel.app</a></span>
+      <span class="pill">📱 Use your phone</span>
+      <span class="pill">📍 Allow Location</span>
+    </div>
+  </header>
+
+  <h2>What it is</h2>
+  <div class="card">
+    <ul>
+      <li>A <strong>travel-safety app for corps members going to camp</strong> — your phone becomes a live tracker for the journey.</li>
+      <li>You register your trip, get a <strong>Tracking ID</strong> (e.g. <code>NYSC-8Q2K7M</code>), and send it to your parents.</li>
+      <li><strong>Parents follow you on a live map with no account and no app</strong> — they just open the link.</li>
+      <li>If anything goes wrong, an <strong>SOS button</strong> emails your next of kin and flags you on the admin dashboard.</li>
+      <li>State coordinators / school admins see every active trip on a <strong>Mission Control</strong> map and respond to alerts.</li>
+    </ul>
+  </div>
+
+  <h2>How to test it — about 10 minutes</h2>
+  <div class="steps">
+
+    <div class="step">
+      <h3><span class="num">1</span> Create your account</h3>
+      <ul>
+        <li>Go to <code>/auth/sign-up</code>: email, full name, phone, <strong>next of kin's phone + email</strong>, password.</li>
+        <li>Use a real next-of-kin email (yours or a friend's) — that's where the SOS lands.</li>
+        <li>You'll be sent to login. Sign in → you land on your <strong>Dashboard</strong>.</li>
+      </ul>
+    </div>
+
+    <div class="step">
+      <h3><span class="num">2</span> Register your trip</h3>
+      <ul>
+        <li>Tap <strong>Start New Trip</strong>.</li>
+        <li><strong>Origin:</strong> tap the locate icon to auto-detect, or type it (e.g. "Jibowu Park, Lagos").</li>
+        <li><strong>Destination:</strong> pick your state — the camp is attached automatically.</li>
+        <li>Next of kin is pre-filled from signup; <strong>Institution:</strong> pick your school.</li>
+        <li>Tap <strong>Start Journey</strong> → the trip is created and you get your Tracking ID.</li>
+      </ul>
+    </div>
+
+    <div class="step">
+      <h3><span class="num">3</span> Share your code before you move</h3>
+      <ul>
+        <li>On the <em>Trip Registered</em> screen, add the <strong>vehicle plate number</strong> (optional, helps responders).</li>
+        <li>Tap <strong>START JOURNEY</strong> → tracking goes live and the map starts moving.</li>
+        <li>Tap <strong>copy</strong> or <strong>share</strong> on the Tracking ID and send it to whoever should follow you.</li>
+      </ul>
+    </div>
+
+    <div class="step">
+      <h3><span class="num">4</span> Let someone track you</h3>
+      <ul>
+        <li>Open <code>corpersafe.vercel.app/track</code> in another browser or phone — <strong>no login needed</strong>.</li>
+        <li>Type the code, tap <strong>Track</strong>.</li>
+        <li>They should see your live position, distance to camp, and plain English like <em>"Alex is on the move."</em></li>
+      </ul>
+    </div>
+
+    <div class="step">
+      <h3><span class="num">5</span> Try the journey controls</h3>
+      <ul>
+        <li><strong>Report Stop</strong> — pick a reason: Food, Traffic, Repair, Sleep, Checkpoint, Other. Parents see the reason.</li>
+        <li>It also <strong>auto-pauses</strong> after ~5 min stopped and <strong>auto-resumes</strong> once you're moving again.</li>
+        <li><strong>Arrived</strong> — confirm, then an 8-second undo. This ends tracking and files the trip in <strong>History</strong>.</li>
+      </ul>
+    </div>
+
+    <div class="step sos">
+      <h3><span class="num">6</span> Test the SOS</h3>
+      <ul>
+        <li><strong>Press and hold SOS for 3 seconds</strong> → you get a <strong>5-second window to cancel</strong>.</li>
+        <li>After that: next of kin is emailed, your pin turns red on the admin map, and parents see <em>"…pressed the SOS button."</em></li>
+        <li>Tap <strong>"I'm Safe — Cancel"</strong> twice to clear a false alarm.</li>
+      </ul>
+      <div class="note">⚠️ Tell your next of kin before testing this — a real email goes out.</div>
+    </div>
+
+  </div>
+
+  <h2>Also worth poking at</h2>
+  <div class="grid2">
+    <div class="mini">
+      <h4>Resilience</h4>
+      <ul>
+        <li><strong>Turn off data mid-trip</strong> — GPS keeps recording and syncs when you're back online.</li>
+        <li><strong>Lock or close the tab</strong> — you'll be warned; the screen should stay on and the tab open.</li>
+      </ul>
+    </div>
+    <div class="mini">
+      <h4>Extras</h4>
+      <ul>
+        <li><strong>Install it</strong> — "Add to Home Screen" works; it opens like a normal app.</li>
+        <li><strong>History &amp; Profile</strong> — past trips with route replay, editable next-of-kin details.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Tell us afterwards</h2>
+  <div class="feedback">
+    <ul>
+      <li>Was anything <strong>confusing or slow</strong> — especially signup and trip registration?</li>
+      <li>Did the map show <strong>where you actually were</strong>, and did your parent's view match it?</li>
+      <li>Did the <strong>SOS email arrive</strong>, and how long did it take?</li>
+      <li>Would you <strong>actually use this</strong> travelling to camp? What's missing?</li>
+    </ul>
+  </div>
+
+  <footer>CorperSafe is independently developed and is not affiliated with the NYSC Directorate.</footer>
+
+</div>
+</body>
+</html>

@@ -68,7 +68,7 @@ export default function Home() {
 
   const handleTrack = () => {
     // Parents paste codes in every format — normalise before navigating
-    // ("53198", "nysc 53198", "NYSC53198" all become "NYSC-53198").
+    // ("8q2k7m", "nysc 8Q2K7M", "NYSC8Q2K7M" all become "NYSC-8Q2K7M").
     const code = normalizeTrackingCode(trackCode);
     if (code) redirect.push(`/track?code=${encodeURIComponent(code)}`);
   };

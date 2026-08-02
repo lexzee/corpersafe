@@ -44,24 +44,20 @@ export default function ProfileContent({
   useEffect(() => {
     if (!user) return;
 
+    // PII is encrypted at rest, so it's fetched through /api/profile, which
+    // holds the decryption key server-side.
     const fetchProfile = async () => {
       try {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
+        const res = await fetch("/api/profile", { cache: "no-store" });
+        if (!res.ok) throw new Error("Could not load profile");
+        const { profile } = await res.json();
 
-        if (error) throw error;
-
-        if (data) {
-          setFormData({
-            full_name: data.full_name || "",
-            phone: data.phone || "",
-            next_of_kin: data.next_of_kin || "",
-            next_of_kin_email: data.next_of_kin_email || "",
-          });
-        }
+        setFormData({
+          full_name: profile.full_name || "",
+          phone: profile.phone || "",
+          next_of_kin: profile.next_of_kin || "",
+          next_of_kin_email: profile.next_of_kin_email || "",
+        });
       } catch (error) {
         console.error("Error fetching profile:", error);
       } finally {
@@ -82,25 +78,23 @@ export default function ProfileContent({
     setMessage({ type: "", text: "" });
 
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          full_name: formData.full_name,
-          phone: formData.phone,
-          next_of_kin: formData.next_of_kin,
-          next_of_kin_email: formData.next_of_kin_email,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user?.id);
+      const res = await fetch("/api/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
 
-      if (error) throw error;
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || "Failed to update profile");
+      }
 
       setMessage({ type: "success", text: "Profile updated successfully!" });
     } catch (error: any) {
       console.error("Error updating profile:", error);
       setMessage({
         type: "error",
-        text: "Failed to update profile. Please try again.",
+        text: error.message || "Failed to update profile. Please try again.",
       });
     } finally {
       setSaving(false);

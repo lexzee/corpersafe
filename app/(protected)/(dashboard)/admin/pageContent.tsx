@@ -240,17 +240,17 @@ export function AdminContent({
     // the whole portal) never loads after a fresh sign-in.
     if (!user) return;
 
+    // The admin's own profile — via /api/profile so full_name comes back
+    // decrypted (it's ciphertext in the table) rather than as "v1:…".
     const fetchProfile = async () => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-      if (error) {
-        console.error(error.message);
+      try {
+        const res = await fetch("/api/profile", { cache: "no-store" });
+        if (!res.ok) throw new Error(`profile: ${res.status}`);
+        const { profile } = await res.json();
+        setProfile(profile);
+      } catch (e) {
+        console.error(e);
         router.push("/auth/login");
-      } else {
-        setProfile(data);
       }
     };
 
@@ -276,33 +276,25 @@ export function AdminContent({
     const fetchTrips = async (isBackgroundUpdate = false) => {
       if (!isBackgroundUpdate) setLoading(true);
 
-      const { data, error } = await supabase
-        .from("trips")
-        .select("*, profiles(full_name, phone, next_of_kin, next_of_kin_email)")
-        .neq("status", "completed")
-        // Incidents closed via the monitor view become history
-        .neq("status", "resolved");
+      // Traveler PII is encrypted at rest, so Mission Control reads through
+      // /api/admin/trips, which re-checks the admin role and decrypts
+      // server-side. Responders still get name, phone and next of kin.
+      let data: Record<string, unknown>[] | null = null;
+      let error: unknown = null;
+      try {
+        const res = await fetch("/api/admin/trips", { cache: "no-store" });
+        if (!res.ok) throw new Error(`admin trips: ${res.status}`);
+        data = (await res.json()).trips;
+      } catch (e) {
+        error = e;
+      }
 
       if (error) {
         console.error("Admin Fetch Error:", error);
       } else {
-        // Client-side filtering for Jurisdiction
-        const filtered = (data || []).filter((t) => {
-          if (!profile?.jurisdiction) return true; // Super admin sees all
-
-          if (profile.role === "state_admin") {
-            return (
-              t.origin === profile.jurisdiction ||
-              t.destination_state === profile.jurisdiction
-            );
-          }
-          if (profile.role === "school_admin") {
-            return t.institution === profile.jurisdiction;
-          }
-          return true;
-        });
-
-        setTrips(filtered);
+        // Jurisdiction scoping now happens server-side in /api/admin/trips,
+        // so out-of-jurisdiction rows never reach the browser at all.
+        setTrips(data || []);
       }
       setLoading(false);
     };
@@ -470,7 +462,7 @@ export function AdminContent({
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right hidden sm:block">
-            <p className="text-sm font-medium">{profile?.full_name}</p>
+            <p className="text-sm font-medium">{profile?.full_name || "Admin"}</p>
             <p className="text-xs text-muted-foreground uppercase">
               {profile?.role?.replace("_", " ")}
             </p>
@@ -561,7 +553,7 @@ export function AdminContent({
                       {trip.plate_number}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {trip.profiles?.full_name}
+                      {trip.profiles?.full_name || "Unknown traveler"}
                     </p>
                   </div>
                 </div>

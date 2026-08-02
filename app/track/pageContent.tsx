@@ -16,7 +16,6 @@ import {
 } from "lucide-react";
 import { ThemeSwitcher } from "@/components/theme-switcher";
 import { useSearchParams } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import {
   getDistanceFromLatLonInKm,
   normalizeTrackingCode,
@@ -42,7 +41,6 @@ export default function TrackPageContent({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
-  const supabase = createClient();
   const searchParams = useSearchParams();
   const urlCode = searchParams.get("code");
 
@@ -70,83 +68,83 @@ export default function TrackPageContent({
   }, [urlCode]);
 
   // Initial Search Handler
-  const handleTrack = async (codeToTrack: string) => {
-    if (!codeToTrack) return;
-    setLoading(true);
-    setError("");
-    setTrip(null);
-    setDestCoords(null);
+  // Trip data now comes from /api/track. The anonymous role can no longer
+  // read the trips table directly: the server calls a scoped, rate-limited
+  // RPC and returns only the columns this screen renders.
+  const fetchTrip = async (
+    codeToTrack: string,
+    { silent = false }: { silent?: boolean } = {},
+  ) => {
+    const cleanCode = normalizeTrackingCode(codeToTrack);
+    if (!cleanCode) {
+      if (!silent) setError("Enter your Tracking ID, e.g. NYSC-8Q2K7M");
+      return;
+    }
+
+    if (!silent) {
+      setLoading(true);
+      setError("");
+      setTrip(null);
+      setDestCoords(null);
+    }
 
     try {
-      // 1. Fetch Trip Data + Driver/PCM Info
-      // Parents type codes every possible way ("53198", "nysc 53198",
-      // "NYSC53198") — normalise to the stored "NYSC-#####" form.
-      const cleanCode = normalizeTrackingCode(codeToTrack);
-      if (!cleanCode) {
-        throw new Error("Enter your Tracking ID, e.g. NYSC-53198");
-      }
-      const { data, error } = await supabase
-        .from("trips")
-        .select("*, profiles(full_name, phone, next_of_kin)")
-        .eq("tracking_code", cleanCode)
-        .maybeSingle();
+      const res = await fetch(
+        `/api/track?code=${encodeURIComponent(cleanCode)}`,
+        { cache: "no-store" },
+      );
+      const payload = await res.json();
 
-      if (error) throw error;
-      if (!data) throw new Error("Tracking ID not found or trip has ended.");
+      if (!res.ok) {
+        // A background refresh should never wipe the map the parent is
+        // watching — surface errors only on an explicit lookup.
+        if (!silent) setError(payload.error || "Tracking ID not found.");
+        if (silent) setConnState("offline");
+        return;
+      }
+
+      const data = payload.trip;
       setTrip(data);
-      // last_updated is null until the traveler starts broadcasting GPS
       setLastUpdate(data.last_updated ? new Date(data.last_updated) : null);
+      setConnState("live");
+
       // Resolve the planned route destination (async precise geocode, with
       // an immediate state-centroid fallback already baked into the helper).
       void geocodeDestination(data).then((point) => {
         if (point) setDestCoords(point);
       });
-    } catch (err: any) {
-      setError("Tracking ID not found or trip has ended.");
+    } catch {
+      if (!silent) setError("Could not reach the tracker. Check your connection.");
+      if (silent) setConnState("offline");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
-  // Real-time Listener
+  const handleTrack = (codeToTrack: string) => fetchTrip(codeToTrack);
+
+  // Live updates by polling.
+  //
+  // Realtime websockets are gone for this screen by design: they enforce RLS,
+  // and anonymous users no longer have SELECT on trips. Polling the scoped
+  // endpoint every 15s keeps the map fresh well inside the rate limit
+  // (4/min against a 10/min ceiling) and stops once the journey ends.
   useEffect(() => {
-    if (!trip?.id) return;
+    if (!trip?.tracking_code) return;
+    if (["completed", "resolved"].includes(trip.status)) {
+      setConnState("offline");
+      return;
+    }
 
-    setConnState("connecting");
-    const channel = supabase
-      .channel(`track-${trip.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "UPDATE",
-          schema: "public",
-          table: "trips",
-          filter: `id=eq.${trip.id}`,
-        },
-        (payload) => {
-          setTrip((prev: any) => ({ ...prev, ...payload.new }));
-          setLastUpdate(
-            payload.new.last_updated
-              ? new Date(payload.new.last_updated)
-              : null,
-          );
-        },
-      )
-      .subscribe((status) => {
-        setConnState(
-          status === "SUBSCRIBED"
-            ? "live"
-            : status === "CLOSED"
-              ? "offline"
-              : "connecting",
-        );
-      });
+    setConnState("live");
+    const id = setInterval(() => {
+      void fetchTrip(trip.tracking_code, { silent: true });
+    }, 15000);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- resubscribe only when the trip changes
-  }, [trip?.id]);
+    return () => clearInterval(id);
+    // Intentionally keyed on the code + status only: fetchTrip is recreated
+    // each render but the interval must not restart on every one.
+  }, [trip?.tracking_code, trip?.status]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -165,9 +163,9 @@ export default function TrackPageContent({
   };
 
   // ---- Plain-language copy for anxious, non-technical parents ----
-  const firstName = (
-    trip?.profiles?.full_name?.split(" ")[0] || "Your traveler"
-  ).trim();
+  // Only the first name crosses the wire now — enough for reassurance copy,
+  // useless as a contact record if someone guesses a code.
+  const firstName = (trip?.traveler_first_name || "Your traveler").trim();
   const parentSummary = (() => {
     if (!trip) return "";
     switch (trip.status) {
@@ -253,7 +251,7 @@ export default function TrackPageContent({
           <Input
             value={inputCode}
             onChange={(e) => setInputCode(e.target.value)}
-            placeholder="Enter Tracking ID (e.g. NYSC-8291)"
+            placeholder="Enter Tracking ID (e.g. NYSC-8Q2K7M)"
             className="flex-1 h-12 rounded-xl uppercase font-mono"
           />
           <Button
@@ -394,10 +392,10 @@ export default function TrackPageContent({
               <CardContent className="p-5 grid grid-cols-1 sm:grid-cols-2 gap-6">
                 <div>
                   <label className="text-xs text-muted-foreground uppercase font-bold">
-                    Full Name
+                    Traveler
                   </label>
                   <p className="text-lg font-medium text-foreground">
-                    {trip.profiles?.full_name || "N/A"}
+                    {trip.traveler_first_name || "N/A"}
                   </p>
                 </div>
                 <div>
@@ -424,14 +422,17 @@ export default function TrackPageContent({
                     </p>
                   )}
                 </div>
+                {/* Next-of-kin contact details are deliberately NOT exposed
+                    here. Anyone holding the code can open this page, so the
+                    tracking endpoint never returns phone numbers. */}
                 <div>
                   <label className="text-xs text-muted-foreground uppercase font-bold">
-                    Emergency Contact
+                    Emergency Response
                   </label>
                   <div className="flex items-center gap-2">
                     <Phone size={16} className="text-primary" />
-                    <span className="text-foreground">
-                      {trip.profiles?.next_of_kin || "N/A"}
+                    <span className="text-foreground text-sm">
+                      Next of kin is alerted automatically on SOS
                     </span>
                   </div>
                 </div>
