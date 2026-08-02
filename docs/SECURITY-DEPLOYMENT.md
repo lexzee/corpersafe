@@ -23,6 +23,27 @@ Add to **Vercel → Project → Settings → Environment Variables** (all enviro
 > unrecoverable — there is no reset. Rotating it means decrypting every row
 > with the old key and re-encrypting with the new one.
 
+### Can I just type a random value?
+
+You can — but don't. `PII_ENCRYPTION_KEY` accepts three forms:
+
+| What you paste | Result |
+|---|---|
+| `openssl rand -base64 32` output (44 chars ending `=`) | ✅ used directly — full 256-bit strength |
+| 64 hex characters | ✅ used directly — full 256-bit strength |
+| anything else, e.g. `corpersafe2026` | ⚠️ accepted, but SHA-256'd into a key — only as strong as the phrase you typed |
+
+That last row is a convenience fallback so a typo doesn't crash the app. A
+guessable passphrase means a leaked database could be brute-forced offline,
+which defeats the point. **Use the `openssl` output.**
+
+No account, service or signup is needed — the key is just 32 random bytes you
+generate yourself. If you're not on a machine with `openssl`, this works too:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
 ## 2. Deploy the app code first
 
 The new code reads *both* encrypted and legacy plaintext columns, so it runs
@@ -108,6 +129,42 @@ Only do this once you're confident — the fallback path disappears with them.
 | Link lifetime | forever | dies 24h after arrival; 30-day backstop |
 | Lookup limits | none | 10/min, 100/hour per IP |
 | Admin feed | direct table read, filtered in browser | `/api/admin/trips`, role + jurisdiction enforced server-side |
+
+## FAQ
+
+**Do I need to re-run the migration after every signup?**
+
+No. A migration is a one-time change to the *shape* of the database, not a
+data-processing job. Once applied:
+
+- Every new signup is encrypted **automatically** — the app calls
+  `/api/profile`, which encrypts before writing. Nothing manual, ever.
+- Every profile edit is encrypted automatically too, and clears any legacy
+  plaintext on that row as a side effect.
+- New trips automatically get a 6-character code from the database default.
+
+You run the migration **once**, and `scripts/encrypt-existing-pii.mjs`
+**once** (for accounts that already existed).
+
+**Does it affect existing data?**
+
+Nothing is deleted or broken. Specifically:
+
+| Existing data | What happens |
+|---|---|
+| Profiles created before the migration | Untouched. New `*_enc` columns are added alongside and start `NULL`. The app reads ciphertext *or* plaintext, so those accounts keep working. |
+| Old plaintext PII | Stays readable until you run the backfill, which encrypts it and nulls the plaintext. |
+| Existing tracking codes (`NYSC-#####`) | **Keep working.** A column `DEFAULT` only applies to new rows, so trips already in flight are unaffected — only newly registered trips get 6-character codes. |
+| Live trips mid-journey | Unaffected. Status, GPS and history all carry over. |
+| Passwords / logins | Untouched — handled by Supabase Auth, not these columns. |
+
+The one behavioural change for existing users: the parents' tracker no longer
+shows the traveler's phone number or next-of-kin number, by design.
+
+**What if I skip the backfill?**
+
+Everything still works — old rows just stay in plaintext, so they're the ones
+still exposed in a database leak. Run it to finish the job.
 
 ## Known trade-offs
 
