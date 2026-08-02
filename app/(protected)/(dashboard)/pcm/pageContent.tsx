@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
+import { firstNameOf, useProfile } from "@/lib/use-profile";
 import { getDistanceFromLatLonInKm, updateStatus } from "@/lib/utils";
 import { geocodeDestination } from "@/lib/geo";
 import {
@@ -764,6 +765,8 @@ export function PCMContent({
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [trip, setTrip] = useState<any>(null);
+  // The real name lives encrypted in profiles, not in user_metadata.
+  const { profile } = useProfile();
 
   // 1. Fetch User & Trip
   useEffect(() => {
@@ -831,7 +834,9 @@ export function PCMContent({
         <div>
           <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
           <p className="text-muted-foreground text-sm">
-            Welcome, {user?.user_metadata?.full_name}
+            {firstNameOf(profile)
+              ? `Welcome, ${firstNameOf(profile)}`
+              : "Welcome back"}
           </p>
         </div>
         <LogoutButton />

@@ -47,7 +47,7 @@ export function SignUpForm({
       // Only the role travels in user metadata. Personal details are NOT put
       // in raw_user_meta_data — that column is plaintext in auth.users, which
       // would defeat encrypting the same values in profiles.
-      const { error } = await supabase.auth.signUp({
+      const { data: signUpData, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { role: "pcm" } },
@@ -57,9 +57,19 @@ export function SignUpForm({
       // Signup leaves us briefly authenticated (email confirmation is off),
       // so use that session to store the PII via the server, which encrypts
       // it before it reaches Postgres.
+      //
+      // Pass the access token explicitly: the auth cookie may not be written
+      // yet at this point, and relying on it was a race that silently lost
+      // the user's name and next-of-kin details.
+      const accessToken = signUpData.session?.access_token;
       const profileRes = await fetch("/api/profile", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(accessToken
+            ? { Authorization: `Bearer ${accessToken}` }
+            : {}),
+        },
         body: JSON.stringify({
           full_name: fullName,
           phone,
@@ -67,9 +77,15 @@ export function SignUpForm({
           next_of_kin_email: nextOfKinEmail,
         }),
       });
+
       if (!profileRes.ok) {
-        // The account exists; the details can be re-entered from Profile.
-        console.error("Could not save profile details at signup.");
+        // Don't strand the user with a half-built account: the login would
+        // succeed but every screen would show a blank name.
+        const detail = await profileRes.json().catch(() => ({}));
+        console.error("Could not save profile details at signup:", detail);
+        throw new Error(
+          "Your account was created, but we couldn't save your details. Please log in and complete your profile.",
+        );
       }
 
       // Supabase authenticates users immediately when email confirmation is

@@ -462,7 +462,7 @@ export function AdminContent({
         </div>
         <div className="flex items-center gap-4">
           <div className="text-right hidden sm:block">
-            <p className="text-sm font-medium">{profile?.full_name}</p>
+            <p className="text-sm font-medium">{profile?.full_name || "Admin"}</p>
             <p className="text-xs text-muted-foreground uppercase">
               {profile?.role?.replace("_", " ")}
             </p>
@@ -553,7 +553,7 @@ export function AdminContent({
                       {trip.plate_number}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      {trip.profiles?.full_name}
+                      {trip.profiles?.full_name || "Unknown traveler"}
                     </p>
                   </div>
                 </div>

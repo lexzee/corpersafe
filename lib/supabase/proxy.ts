@@ -61,7 +61,12 @@ export async function updateSession(request: NextRequest) {
     !request.nextUrl.pathname.startsWith("/login") &&
     !request.nextUrl.pathname.startsWith("/auth") &&
     // Parents/guardians must be able to track a trip by code without an account
-    !request.nextUrl.pathname.startsWith("/track")
+    !request.nextUrl.pathname.startsWith("/track") &&
+    // API routes must never be redirected: they enforce their own auth and
+    // return JSON. Redirecting /api/track to an HTML login page would break
+    // the anonymous parents' tracker, and every other route would hand the
+    // caller unparseable HTML instead of a 401.
+    !request.nextUrl.pathname.startsWith("/api")
   ) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();

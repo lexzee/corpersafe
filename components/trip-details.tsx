@@ -19,7 +19,7 @@ const TripDetails = ({
       <div className="flex justify-between items-start mb-4">
         <div>
           <h3 className="font-bold text-lg text-card-foreground">
-            {selectedTrip.profiles?.full_name}
+            {selectedTrip.profiles?.full_name || "Name unavailable"}
           </h3>
           <p className="text-xs text-muted-foreground font-mono">
             {selectedTrip.tracking_code}

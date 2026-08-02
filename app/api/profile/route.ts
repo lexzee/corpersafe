@@ -12,11 +12,36 @@ import { decryptProfile, encryptProfile } from "@/lib/crypto";
  * never taken from the request body.
  */
 
-export async function GET() {
+/**
+ * Resolve the caller from the session cookie, falling back to an explicit
+ * `Authorization: Bearer <access_token>` header.
+ *
+ * The header path matters at signup: the browser calls this immediately after
+ * signUp() resolves, and the auth cookie may not have been written yet. The
+ * token is verified against Supabase either way — it is never trusted blindly.
+ */
+async function resolveUser(request: Request) {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
+  if (user) return user;
+
+  const auth = request.headers.get("authorization");
+  const token = auth?.toLowerCase().startsWith("bearer ")
+    ? auth.slice(7).trim()
+    : null;
+  if (!token) return null;
+
+  const admin = createServiceClient();
+  const {
+    data: { user: tokenUser },
+  } = await admin.auth.getUser(token);
+  return tokenUser ?? null;
+}
+
+export async function GET(request: Request) {
+  const user = await resolveUser(request);
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
@@ -36,21 +61,67 @@ export async function GET() {
     return NextResponse.json({ error: "Could not load profile" }, { status: 500 });
   }
 
+  const decrypted = decryptProfile(data);
+
+  // Self-heal legacy accounts.
+  //
+  // Accounts created before this change kept their details in
+  // auth.users.raw_user_meta_data. If the profile row has no name, adopt
+  // whatever metadata exists, encrypt it, and persist — so a returning user
+  // sees their name instead of a blank greeting, and the plaintext copy in
+  // user_metadata stops being the source of truth.
+  if (!decrypted.full_name) {
+    const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const str = (v: unknown) =>
+      typeof v === "string" && v.trim() ? v.trim() : null;
+
+    const recovered = {
+      full_name: str(meta.full_name),
+      phone: str(meta.phone) ?? decrypted.phone,
+      next_of_kin: str(meta.next_of_kin) ?? decrypted.next_of_kin,
+      next_of_kin_email:
+        str(meta.next_of_kin_email) ?? decrypted.next_of_kin_email,
+    };
+
+    if (recovered.full_name) {
+      const { error: healError } = await admin.from("profiles").upsert(
+        {
+          id: user.id,
+          ...encryptProfile(recovered),
+          full_name: null,
+          phone: null,
+          next_of_kin: null,
+          next_of_kin_email: null,
+        },
+        { onConflict: "id" },
+      );
+      if (healError) {
+        console.error("profile self-heal:", healError.message);
+      } else {
+        return NextResponse.json({
+          profile: {
+            id: user.id,
+            role: data?.role ?? "pcm",
+            jurisdiction: data?.jurisdiction ?? null,
+            ...recovered,
+          },
+        });
+      }
+    }
+  }
+
   return NextResponse.json({
     profile: {
       id: user.id,
       role: data?.role ?? "pcm",
       jurisdiction: data?.jurisdiction ?? null,
-      ...decryptProfile(data),
+      ...decrypted,
     },
   });
 }
 
 export async function PUT(request: Request) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await resolveUser(request);
 
   if (!user) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
